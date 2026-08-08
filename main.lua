@@ -6,8 +6,11 @@ return function(mod)
   local optionSchema = {
     { key = "card_color", label = "CARD COLOR", type = "choice",
       default = "species", choices = {
-        { "SPECIES", "species" }, { "HEALTH", "health" },
-        { "BLUE", "blue" }, { "MONO", "mono" },
+        -- Keep the original persisted value for the new default so existing
+        -- installs automatically receive type colours after updating.
+        { "TYPE", "species" }, { "SPECIES", "species_palette" },
+        { "HEALTH", "health" }, { "BLUE", "blue" },
+        { "MONO", "mono" },
       } },
     { key = "hp_text", label = "HP DISPLAY", type = "choice",
       default = "bar", choices = {

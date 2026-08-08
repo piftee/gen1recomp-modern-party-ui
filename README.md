@@ -1,7 +1,8 @@
 # Modern Party UI
 
 Modern Party UI rebuilds the POKéMON party screen as a responsive two-column
-card grid while keeping Gen 1's own font, animated menu icons and palettes.
+card grid while keeping Gen 1's own font and animated menu icons. Party cards
+now use a cohesive primary-type palette shared with Typed Move Colors.
 
 **Persona: the nostalgic modernizer.** It is for players who want the clearer
 information hierarchy of newer Pokémon games without importing art from a
@@ -23,7 +24,7 @@ Red, Blue, or Yellow ROM imported into
 
 - the six party positions form two columns of chamfered, palette-tinted cards
 - left/right/up/down navigation follows the visible grid
-- the focused Pokémon receives a bright inset selection treatment
+- the focused Pokémon receives a larger black frame and raised light face
 - empty team slots stay visible, making the six-member structure immediately clear
 - aligned HP and labelled blue EXP meters mirror newer party screens
 - Pokémon icons are centred within their dedicated card column
@@ -46,7 +47,7 @@ saved values, and changes appear the next time the party screen draws.
 
 | Setting | Choices |
 | --- | --- |
-| Card Color | Species, health, blue, or monochrome palettes |
+| Card Color | Type, species, health, blue, or monochrome palettes |
 | HP Display | Bar only, percentage, or current/max values |
 | EXP Display | Bar only, percentage, or progress/level-target values |
 | EXP Strip | Show or hide progress toward the next level |
@@ -54,6 +55,26 @@ saved values, and changes appear the next time the party screen draws.
 | Backdrop | Diagonal grid or plain background |
 | Widescreen | Fill the available width or use classic 160×144 |
 | Icon Anim | Animate the focused menu icon or hold its resting frame |
+
+## Type palette
+
+Type is the default card-colour setting and follows each Pokémon's live primary
+type. The bold card faces use the supplied reference palette exactly:
+
+| Type | Colour | Type | Colour | Type | Colour |
+| --- | --- | --- | --- | --- | --- |
+| Normal | `#9098A2` | Fighting | `#CE3F6B` | Flying | `#8FA8DE` |
+| Poison | `#AB6AC8` | Ground | `#D97746` | Rock | `#C9B68B` |
+| Bug | `#90C02C` | Ghost | `#5269AD` | Fire | `#FE9C55` |
+| Water | `#4D90D6` | Grass | `#65BC5E` | Electric | `#F4D23B` |
+| Psychic | `#F97177` | Ice | `#73CEBF` | Dragon | `#096DC3` |
+| Dark | `#5B5265` | Fairy | `#EC90E7` | Steel | `#5B8EA1` |
+
+Each colour receives a lighter selected shade while retaining the game's paper
+and ink endpoints. OG Red/Blue/Yellow, monochrome, inverted and Classic display
+modes still apply. Unknown or typeless custom species use Normal. Choose
+**Species** to restore the engine's original per-species palettes, including
+palette changes supplied by compatible sprite mods.
 
 ## Other sprite mods
 
@@ -72,6 +93,11 @@ mod intends. Transparent pixels are backed with the card's final display
 colour, so true-colour protection does not introduce a gray icon square. The
 same protection is clipped beneath the action menu, keeping popup text and
 backgrounds intact when they overlap a colour icon.
+
+The **Species** card-colour option continues to use the engine's live Pokémon
+palette lookup. The default **Type** option changes only the card surface; icon
+pixels still come from the shared renderer and authored true-colour icons stay
+untouched.
 
 Mods that replace the entire `PartyMenu` screen conflict by design because two
 screen implementations cannot own the same screen id. The manager reports that

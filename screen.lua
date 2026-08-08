@@ -20,6 +20,47 @@ return function(mod)
   local DARK = 85 / 255
   local BLACK = 0
 
+  -- Exact flat fills sampled from the supplied type-colour reference. Dark,
+  -- Fairy and Steel are included for party species registered by content
+  -- mods, even though the original Gen 1 roster does not use them.
+  local TYPE_BASE_COLORS = {
+    NORMAL = { 144, 152, 162 },
+    FIGHTING = { 206, 63, 107 },
+    FLYING = { 143, 168, 222 },
+    POISON = { 171, 106, 200 },
+    GROUND = { 217, 119, 70 },
+    ROCK = { 201, 182, 139 },
+    BUG = { 144, 192, 44 },
+    GHOST = { 82, 105, 173 },
+    FIRE = { 254, 156, 85 },
+    WATER = { 77, 144, 214 },
+    GRASS = { 101, 188, 94 },
+    ELECTRIC = { 244, 210, 59 },
+    PSYCHIC_TYPE = { 249, 113, 119 },
+    PSYCHIC = { 249, 113, 119 },
+    ICE = { 115, 206, 191 },
+    DRAGON = { 9, 109, 195 },
+    DARK = { 91, 82, 101 },
+    FAIRY = { 236, 144, 231 },
+    STEEL = { 91, 142, 161 },
+  }
+
+  local function typeRamp(base)
+    local light = {}
+    for i = 1, 3 do
+      light[i] = math.floor(base[i] + (255 - base[i]) * 0.30 + 0.5)
+    end
+    return {
+      { 255, 255, 255 }, light,
+      { base[1], base[2], base[3] }, { 0, 0, 0 },
+    }
+  end
+
+  local TYPE_COLORS = {}
+  for id, base in pairs(TYPE_BASE_COLORS) do
+    TYPE_COLORS[id] = typeRamp(base)
+  end
+
   local inkShader -- false when unavailable
   local cardPalette -- assigned after the draw helpers
 
@@ -258,17 +299,25 @@ return function(mod)
   end
 
   local function drawCardFrame(x, y, width, height, selected)
+    -- Match Typed Move Colors' focus hierarchy. The selected card grows by a
+    -- pixel on each side, uses a black outer frame, and raises its lighter
+    -- face inside that frame. Its contents keep their original grid anchors,
+    -- so the emphasis cannot crowd the icon or meter labels.
+    if selected then
+      x, y, width, height = x - 1, y - 1, width + 2, height + 2
+    end
+
     gray(BLACK)
     chamfer("fill", x + 2, y + 2, width - 3, height - 3, 4)
 
-    gray(selected and WHITE or LIGHT)
+    gray(selected and BLACK or LIGHT)
     chamfer("fill", x + 1, y + 1, width - 3, height - 3, 4)
 
     gray(selected and LIGHT or DARK)
     chamfer("fill", x + 3, y + 3, width - 7, height - 7, 3)
 
     if selected then
-      gray(WHITE)
+      gray(DARK)
       love.graphics.rectangle("fill", x + 1, y + 8, 2, height - 16)
     end
   end
@@ -636,9 +685,14 @@ return function(mod)
       return PaletteFX.pal(data, "BLUEMON")
     elseif style == "mono" then
       return PaletteFX.pal(data, "GRAYMON") or PaletteFX.GRAYS
+    elseif style == "species_palette" or PaletteFX.mode == "ogred" then
+      return PaletteFX.monPal(data, mon.species)
+        or PaletteFX.pal(data, "BLUEMON")
     end
-    return PaletteFX.monPal(data, mon.species)
-      or PaletteFX.pal(data, "BLUEMON")
+    local def = definition(menu, mon)
+    local primary = def and def.types and def.types[1]
+    return TYPE_COLORS[tostring(primary or "NORMAL"):upper()]
+      or TYPE_COLORS.NORMAL
   end
 
   local function sgbPalettes(menu, game)
