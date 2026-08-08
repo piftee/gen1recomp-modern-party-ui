@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5 - 2026-08-08
+
+- Added reference-matched primary-type colours as the default party-card style.
+- Kept the original per-species palette as a separate compatibility option.
+- Added matching Dark, Fairy and Steel colours for content mods.
+- Strengthened the selected Pokémon with a black frame and subtly raised card face.
+- Preserved OG Red/Blue/Yellow, monochrome, inverted and Classic display modes.
+
 ## 0.2.4 - 2026-08-08
 
 - Clipped true-colour icon restoration around the action menu and its shadow.

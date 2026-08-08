@@ -85,13 +85,14 @@ T.eq(#mainOptionRows, 9,
   "all eight mod settings are mirrored into the main Options menu")
 T.eq(mainOptionRows[2].id, "modern_party_ui_card_color",
   "the party settings follow the game's own option rows")
-T.eq(mainOptionRows[2].value(optionGame), "SPECIES",
+T.eq(mainOptionRows[2].value(optionGame), "TYPE",
   "main Options reads the same default as the mod manager")
 mainOptionRows[2].step(optionGame, 1)
-T.eq(run.loader.modOptions.modern_party_ui.card_color, "health",
-  "main Options updates the live mod setting")
-T.eq(optionGame.save.options.modOptions.modern_party_ui.card_color, "health",
-  "main Options persists into the standard mod-options bucket")
+T.eq(run.loader.modOptions.modern_party_ui.card_color, "species_palette",
+  "main Options exposes the original species palette after the type default")
+T.eq(optionGame.save.options.modOptions.modern_party_ui.card_color,
+  "species_palette",
+  "main Options persists the explicit species-palette choice")
 T.eq(mainOptionRows[4].id, "modern_party_ui_exp_text",
   "the EXP display has its own main Options row")
 T.eq(mainOptionRows[4].value(optionGame), "PERCENT",
@@ -181,10 +182,12 @@ local iconCalls = {}
 local trueColorMarks = {}
 local fractionalScales = {}
 local iconBackgrounds = {}
+local cardLayers = {}
 local drawnText = {}
 local realMarkTrueColor = PaletteFX.markTrueColor
 local realScale = graphics.scale
 local realRectangle = graphics.rectangle
+local realPolygon = graphics.polygon
 local realFontDraw = Font.draw
 PartyMenu.drawIcon = function(_, drawn, x, y, selected)
   iconCalls[#iconCalls + 1] = {
@@ -205,6 +208,13 @@ graphics.rectangle = function(mode, x, y, w, h)
   end
   return realRectangle(mode, x, y, w, h)
 end
+graphics.polygon = function(mode, points)
+  local r, g, b, a = graphics.getColor()
+  cardLayers[#cardLayers + 1] = {
+    mode = mode, points = points, color = { r, g, b, a },
+  }
+  if realPolygon then return realPolygon(mode, points) end
+end
 Font.draw = function(text, x, y)
   drawnText[#drawnText + 1] = { text = text, x = x, y = y }
   return realFontDraw(text, x, y)
@@ -217,6 +227,7 @@ PartyMenu.drawIcon = realDrawIcon
 PaletteFX.markTrueColor = realMarkTrueColor
 graphics.scale = realScale
 graphics.rectangle = realRectangle
+graphics.polygon = realPolygon
 Font.draw = realFontDraw
 run.loader.modOptions.modern_party_ui = nil
 T.check(ok, "the card grid draws headlessly: " .. tostring(drawErr))
@@ -234,8 +245,14 @@ T.eq(trueColorMarks[1].y, 21,
   "true-colour protection follows the first card's icon row")
 T.eq(#iconBackgrounds, 2,
   "replacement icon transparency receives a colour-matched card backing")
-T.eq(iconBackgrounds[1].g, 220 / 255,
+T.eq(iconBackgrounds[1].g, 208 / 255,
   "the selected replacement icon backing uses its card's display colour")
+T.eq(cardLayers[2].color[1], 0,
+  "the selected party card uses a dominant black outer frame")
+T.eq(cardLayers[2].points[1], 4,
+  "the selected frame grows one pixel beyond its normal card geometry")
+T.eq(cardLayers[2].points[2], 16,
+  "the selected frame is raised one pixel without moving card contents")
 T.eq(#fractionalScales, 0,
   "the native tile font is never fractionally scaled")
 local hpOverlay, expOverlay
@@ -322,10 +339,32 @@ T.eq(zones[4].x, zones[3].x,
   "the EXP bar aligns directly below the HP bar")
 T.eq(zones[4].colors, run.data.palettes.palettes.EXP,
   "every EXP bar uses the dedicated blue palette")
+local function exactBase(zone, rgb)
+  local actual = zone and zone.colors and zone.colors[3]
+  return actual and actual[1] == rgb[1] and actual[2] == rgb[2]
+    and actual[3] == rgb[3]
+end
+T.check(exactBase(zones[2], { 101, 188, 94 }),
+  "Grass party cards use the exact supplied reference colour")
+T.check(exactBase(zones[5], { 254, 156, 85 }),
+  "Fire party cards use the exact supplied reference colour")
+T.check(exactBase(zones[8], { 77, 144, 214 }),
+  "Water party cards use the exact supplied reference colour")
+run.loader.modOptions.modern_party_ui = { card_color = "species_palette" }
+local speciesZones = screen:sgbPalettes(game) or {}
+T.eq(speciesZones[2].colors, run.data.palettes.palettes.GREENMON,
+  "the Species option retains live per-species palette compatibility")
 run.loader.modOptions.modern_party_ui = { card_color = "health" }
 local healthZones = screen:sgbPalettes(game) or {}
 T.eq(healthZones[2].colors, run.data.palettes.palettes.GREENBAR,
   "CARD COLOR changes the live card palette without reopening the screen")
+PaletteFX.setMode("og")
+T.eq(PaletteFX.effectiveColors(zones[2].colors), PaletteFX.GRAYS,
+  "monochrome display mode still replaces the type palette")
+PaletteFX.setMode("classic")
+T.eq(PaletteFX.effectiveColors(zones[2].colors), PaletteFX.CLASSIC,
+  "Classic display mode still replaces the type palette")
+PaletteFX.setMode("gbc")
 run.loader.modOptions.modern_party_ui = { exp_strip = false }
 local noExpZones = screen:sgbPalettes(game) or {}
 T.eq(#noExpZones, 13,

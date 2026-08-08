@@ -1,7 +1,7 @@
 {
   "id": "modern_party_ui",
   "name": "Modern Party UI",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "github": "piftee/gen1recomp-modern-party-ui",
   "api": 2,
   "entry": "main.lua",
@@ -15,5 +15,5 @@
   "incompatible": [],
   "permissions": ["engine_internals"],
   "experimental": false,
-  "description": "A responsive two-column party card grid built from Gen 1 fonts, menu icons and palettes."
+  "description": "A responsive type-coloured party card grid built from Gen 1 fonts and menu icons."
 }
