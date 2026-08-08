@@ -1,0 +1,27 @@
+return {
+  summary = "A responsive modern party-card grid made from Gen 1 UI assets.",
+  author = "ishhodaszi",
+  tags = { "ui", "quality-of-life", "cosmetic" },
+  differences = {
+    changed = {
+      "Responsive two-column party-card layout and grid navigation",
+      "HP, status and type information hierarchy",
+    },
+    added = {
+      "Eight configurable presentation settings",
+      "Widescreen party surfaces that expand to the available display width",
+      "Visible empty party slots",
+      "Selected Pokémon type summary",
+      "True-colour protection for authored replacement menu icons",
+      "Direct access to every setting from the game's main Options menu",
+    },
+    known = {
+      "Uses the engine_internals permission to retain the complete built-in party controller",
+      "Other mods that replace the PartyMenu screen itself conflict; menu-icon and pokemon.icon replacements compose",
+    },
+  },
+  credits = {
+    { who = "Gen1Recomp", for_ = "native mod platform and original UI renderer" },
+  },
+  compat = { engine = ">=0.0.0-dev <1.0.0", modApi = 2 },
+}
