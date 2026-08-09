@@ -114,34 +114,44 @@ return function(mod)
     return out
   end)
 
-  local source, readErr = mod:read("screen.lua")
-  if not source then
-    mod.log:error("screen.lua is missing (%s); reinstall the mod",
-      tostring(readErr or "unknown read error"))
-    return
+  local function loadScreen(filename, label)
+    local source, readErr = mod:read(filename)
+    if not source then
+      mod.log:error("%s is missing (%s); reinstall the mod",
+        filename, tostring(readErr or "unknown read error"))
+      return nil
+    end
+
+    local chunk, compileErr = load(source, "@" .. mod.path .. "/" .. filename)
+    if not chunk then
+      mod.log:error("%s did not compile: %s", filename, tostring(compileErr))
+      return nil
+    end
+
+    local ok, makeScreen = pcall(chunk)
+    if not ok or type(makeScreen) ~= "function" then
+      mod.log:error("%s must return a factory function: %s",
+        filename, tostring(makeScreen))
+      return nil
+    end
+
+    local made, record = pcall(makeScreen, mod)
+    if not made or type(record) ~= "table"
+        or type(record.new) ~= "function" then
+      mod.log:error("%s screen factory failed: %s", label, tostring(record))
+      return nil
+    end
+    return record
   end
 
-  local chunk, compileErr = load(source, "@" .. mod.path .. "/screen.lua")
-  if not chunk then
-    mod.log:error("screen.lua did not compile: %s", tostring(compileErr))
-    return
-  end
-
-  local ok, makeScreen = pcall(chunk)
-  if not ok or type(makeScreen) ~= "function" then
-    mod.log:error("screen.lua must return a factory function: %s",
-      tostring(makeScreen))
-    return
-  end
-
-  local made, record = pcall(makeScreen, mod)
-  if not made or type(record) ~= "table" or type(record.new) ~= "function" then
-    mod.log:error("party screen factory failed: %s", tostring(record))
-    return
-  end
+  local record = loadScreen("screen.lua", "party")
+  if not record then return end
 
   -- PartyMenu is normally a built-in fallback rather than a registry record,
   -- so registering this id makes the mod-owned factory win in Screens.resolve.
   mod.content.screens:register("PartyMenu", record)
-  mod.log:info("modern party roster enabled")
+  local summary = loadScreen("summary.lua", "summary")
+  if not summary then return end
+  mod.content.screens:register("SummaryMenu", summary)
+  mod.log:info("modern party roster and summary enabled")
 end

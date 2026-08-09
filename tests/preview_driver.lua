@@ -10,9 +10,18 @@ return function(game)
   local Screens = require("src.ui.Screens")
   local DIR = os.getenv("SHOT_DIR") or "/tmp/modern-party-ui"
 
-  if os.getenv("PREVIEW_WIDE") == "1" then
+  if os.getenv("PREVIEW_SQUARE") == "1" then
+    love.window.setMode(1024, 768, { resizable = true, minwidth = 640,
+      minheight = 576 })
+  elseif os.getenv("PREVIEW_WIDE") == "1" then
     love.window.setMode(1280, 720, { resizable = true, minwidth = 640,
       minheight = 576 })
+  elseif os.getenv("PREVIEW_ANDROID") == "1" then
+    love.window.setMode(1600, 845, { resizable = true,
+      minwidth = 640, minheight = 360 })
+  elseif os.getenv("PREVIEW_PORTRAIT") == "1" then
+    love.window.setMode(390, 844, { resizable = true,
+      minwidth = 320, minheight = 480 })
   end
 
   if os.getenv("PREVIEW_OPTIONS") == "1" then
@@ -93,4 +102,16 @@ return function(game)
   U.wait(8)
   U.log("PASS action menu prepared")
   U.shot(game, DIR .. "/modern_party_ui_actions.png")
+
+  while game.stack:top() do game.stack:pop() end
+  local summary = Screens.push(game, "SummaryMenu", party[2])
+  U.wait(8)
+  U.log(summary.modernPartySummary
+    and "PASS modern stats summary prepared"
+    or "FAIL modern summary was not registered")
+  U.shot(game, DIR .. "/modern_party_summary_stats.png")
+  summary.page = 2
+  U.wait(8)
+  U.log("PASS modern moves summary prepared")
+  U.shot(game, DIR .. "/modern_party_summary_moves.png")
 end

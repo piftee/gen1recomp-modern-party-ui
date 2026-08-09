@@ -6,6 +6,7 @@ local PartyMenu = require("src.ui.PartyMenu")
 local Font = require("src.render.Font")
 local PaletteFX = require("src.render.PaletteFX")
 local Runtime = require("src.mods.Runtime")
+local SummaryMenu = require("src.ui.SummaryMenu")
 
 local data = T.fixtures.fresh()
 data.icons = {
@@ -105,6 +106,9 @@ run.loader.modOptions.modern_party_ui = nil
 local record = run.data.screens and run.data.screens.PartyMenu
 T.check(type(record) == "table" and type(record.new) == "function",
   "the PartyMenu screen record is registered")
+local summaryRecord = run.data.screens and run.data.screens.SummaryMenu
+T.check(type(summaryRecord) == "table" and type(summaryRecord.new) == "function",
+  "the SummaryMenu screen record is registered")
 
 local function mon(species, name, level, hp, maxHP, status)
   return {
@@ -377,6 +381,142 @@ local tmZones = tm:sgbPalettes(game) or {}
 T.eq(#tmZones, 7, "TM/HM mode emits base + cards but no HP palettes")
 local tmOK, tmErr = pcall(tm.draw, tm)
 T.check(tmOK, "TM/HM mode draws headlessly: " .. tostring(tmErr))
+
+-- Summary pages retain the original controller but use the same responsive
+-- type-card presentation and palette system as the party roster.
+party[1].moves = {
+  { id = "FIX_TACKLE", pp = 31 }, { id = "FIX_EMBERISH", pp = 20 },
+  { id = "FIX_CUT", pp = 24 }, { id = "FIX_SCRATCH", pp = 35 },
+}
+party[1].ot, party[1].otId = "RED", 13839
+local summary = summaryRecord.new(game, party[1])
+T.check(summary.modernPartySummary == true,
+  "the modern summary presentation is installed")
+T.eq(summary.modernSummaryLayout, "responsive_cards",
+  "the summary identifies its adaptive card layout")
+T.eq(getmetatable(summary), SummaryMenu,
+  "the summary keeps the original SummaryMenu controller")
+T.eq(summary.update, SummaryMenu.update,
+  "native page switching and closing behavior remain unchanged")
+
+graphics.getPixelDimensions = function() return 1600, 845 end
+T.eq(select(1, summary:uiSize()), 320,
+  "a short Android landscape display exposes its full responsive width")
+graphics.getPixelDimensions = function() return 360, 800 end
+T.eq(select(1, summary:uiSize()), 160,
+  "a narrow portrait display falls back to the readable classic width")
+graphics.getPixelDimensions = function() return 1280, 720 end
+T.eq(select(1, summary:uiSize()), 256,
+  "a 16:9 desktop display matches the responsive party surface")
+graphics.getPixelDimensions = function() return 5120, 720 end
+T.eq(select(1, summary:uiSize()), 640,
+  "an ultrawide display uses the engine's largest valid UI surface")
+T.eq(select(1, screen:uiSize()), 640,
+  "the party roster also avoids falling back on ultrawide displays")
+graphics.getPixelDimensions = realPixelDimensions
+
+game.renderer = { uiSize = function() return 256, 144 end }
+summary.page = 1
+local summaryZones = summary:sgbPalettes(game) or {}
+T.eq(summaryZones[1].w, 256,
+  "the summary base palette covers the complete wide surface")
+T.check(exactBase(summaryZones[2], { 101, 188, 94 }),
+  "the profile rail uses the same exact Grass card colour as the party")
+T.eq(#summaryZones, 4,
+  "summary palettes no longer recolour the entire sprite rectangle")
+local summaryText, summaryMarks = {}, {}
+Font.draw = function(text, x, y)
+  summaryText[#summaryText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  summaryMarks[#summaryMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+local summaryOK, summaryErr = pcall(summary.draw, summary)
+Font.draw = realFontDraw
+PaletteFX.markTrueColor = realMarkTrueColor
+T.check(summaryOK,
+  "the modern stats summary draws headlessly: " .. tostring(summaryErr))
+T.eq(#summaryMarks, 1,
+  "the sprite-only colour result is protected from the card palette")
+local attackLabel, attackValue
+for i, call in ipairs(summaryText) do
+  if call.text == "ATTACK" then
+    attackLabel, attackValue = call, summaryText[i + 1]
+    break
+  end
+end
+T.check(attackLabel and attackValue
+    and attackValue.text == tostring(summary.mon.stats.attack or 0)
+    and attackLabel.y == attackValue.y,
+  "wide stat labels and values form one centred group")
+
+game.renderer = { uiSize = function() return 208, 144 end }
+local squareText = {}
+Font.draw = function(text, x, y)
+  squareText[#squareText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local squareOK, squareErr = pcall(summary.draw, summary)
+Font.draw = realFontDraw
+T.check(squareOK,
+  "the square-aspect stats summary draws headlessly: " .. tostring(squareErr))
+local compactLabel, compactValue
+for i, call in ipairs(squareText) do
+  if call.text == "ATK" or call.text == "ATTACK" then
+    compactLabel, compactValue = call, squareText[i + 1]
+    break
+  end
+end
+T.check(compactLabel and compactValue and compactLabel.y == compactValue.y,
+  "square-aspect stat labels and values stay grouped centrally")
+
+game.renderer = { uiSize = function() return 256, 144 end }
+summary.page = 2
+local moveZones = summary:sgbPalettes(game) or {}
+T.eq(#moveZones, 7,
+  "the moves summary emits profile, EXP and four move palettes")
+T.check(moveZones[4].x < moveZones[5].x,
+  "wide summaries arrange the first two moves as a two-column row")
+T.check(exactBase(moveZones[5], { 254, 156, 85 }),
+  "summary move cards use the shared exact Fire reference colour")
+local moveText = {}
+Font.draw = function(text, x, y)
+  moveText[#moveText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local movesOK, movesErr = pcall(summary.draw, summary)
+Font.draw = realFontDraw
+T.check(movesOK,
+  "the modern moves summary draws headlessly: " .. tostring(movesErr))
+local firstMove
+for _, call in ipairs(moveText) do
+  if call.text:match("^FIX TACK") then firstMove = call break end
+end
+local firstMoveZone = moveZones[4]
+T.check(firstMove and math.abs(firstMove.x + Font.width(firstMove.text) / 2
+    - (firstMoveZone.x + firstMoveZone.w / 2)) <= 1,
+  "wide move names are centred within their cards")
+
+game.renderer = { uiSize = function() return 160, 144 end }
+local compactMoveZones = summary:sgbPalettes(game) or {}
+T.eq(compactMoveZones[4].x, compactMoveZones[5].x,
+  "compact summaries stack move cards instead of crushing two columns")
+game.renderer = nil
+
+while stack:top() do stack:pop() end
+stack:push(summary)
+summary.page = 1
+input.pressed.a = true
+summary:update(0)
+input.pressed.a = nil
+T.eq(summary.page, 2,
+  "A still advances from the stats page through the native controller")
+input.pressed.b = true
+summary:update(0)
+input.pressed.b = nil
+T.check(stack:top() ~= summary,
+  "B still closes the moves page through the native controller")
 
 -- Forced battle selection still takes the native callback path.
 local chosen
