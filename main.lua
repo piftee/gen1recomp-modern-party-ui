@@ -114,6 +114,9 @@ return function(mod)
     return out
   end)
 
+  local genderMod = mod.find("gender_mod")
+  local genderExports = genderMod and genderMod.exports or nil
+
   local function loadScreen(filename, label)
     local source, readErr = mod:read(filename)
     if not source then
@@ -135,7 +138,7 @@ return function(mod)
       return nil
     end
 
-    local made, record = pcall(makeScreen, mod)
+    local made, record = pcall(makeScreen, mod, genderExports)
     if not made or type(record) ~= "table"
         or type(record.new) ~= "function" then
       mod.log:error("%s screen factory failed: %s", label, tostring(record))
@@ -147,11 +150,32 @@ return function(mod)
   local record = loadScreen("screen.lua", "party")
   if not record then return end
 
-  -- PartyMenu is normally a built-in fallback rather than a registry record,
-  -- so registering this id makes the mod-owned factory win in Screens.resolve.
-  mod.content.screens:register("PartyMenu", record)
+  -- Gender Mod 0.3.5 contributes complete classic PartyMenu/SummaryMenu
+  -- records to add its glyphs. Modern Party UI loads after it through the
+  -- optional dependency above, consumes its public gender exports, and
+  -- replaces only those two presentation records. All gender mechanics,
+  -- storage, battle HUD work, naming and PC labels remain Gender Mod-owned.
+  local genderParty = genderExports
+    and mod.content.screens:get("PartyMenu") or nil
+  if genderParty then
+    mod.content.screens:override("PartyMenu", record)
+  else
+    -- PartyMenu is normally a built-in fallback rather than a registry
+    -- record, so registration makes the mod factory win in Screens.resolve.
+    mod.content.screens:register("PartyMenu", record)
+  end
   local summary = loadScreen("summary.lua", "summary")
   if not summary then return end
-  mod.content.screens:register("SummaryMenu", summary)
-  mod.log:info("modern party roster and summary enabled")
+  local genderSummary = genderExports
+    and mod.content.screens:get("SummaryMenu") or nil
+  if genderSummary then
+    mod.content.screens:override("SummaryMenu", summary)
+  else
+    mod.content.screens:register("SummaryMenu", summary)
+  end
+  if genderExports then
+    mod.log:info("modern party roster and summary enabled with Gender Mod")
+  else
+    mod.log:info("modern party roster and summary enabled")
+  end
 end

@@ -16,12 +16,13 @@ return {
       "Reference-matched primary-type card colours with a species-palette fallback",
       "A larger black focus frame for the selected Pokémon",
       "Responsive stats, EXP and move cards on Pokémon summaries",
+      "Gender Mod 0.3.5 markers on modern party and summary cards",
       "True-colour protection for authored replacement menu icons",
       "Direct access to every setting from the game's main Options menu",
     },
     known = {
       "Uses the engine_internals permission to retain the complete built-in party controller",
-      "Other mods that replace the PartyMenu screen itself conflict; menu-icon and pokemon.icon replacements compose",
+      "Gender Mod 0.3.5 composes explicitly; other full PartyMenu replacements still need a dedicated adapter",
     },
   },
   credits = {

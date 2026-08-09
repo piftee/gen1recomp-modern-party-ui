@@ -3,7 +3,7 @@
 -- Construction and actions still delegate to the engine controller. This
 -- module adds a card-grid renderer and a thin navigation adapter; item use,
 -- TM/HM checks, field moves, switching, healing and callbacks remain native.
-return function(mod)
+return function(mod, genderExports)
   local PartyMenu = require("src.ui.PartyMenu")
   local Font = require("src.render.Font")
   local Growth = require("src.pokemon.Growth")
@@ -64,6 +64,14 @@ return function(mod)
 
   local inkShader -- false when unavailable
   local cardPalette -- assigned after the draw helpers
+
+  local function cardFaceColor(menu, mon, selected)
+    if type(cardPalette) ~= "function" then return nil end
+    local palette = cardPalette(menu, mon)
+      or PaletteFX.pal(menu.game.data, "BLUEMON")
+    local effective = PaletteFX.effectiveColors(palette)
+    return effective and effective[selected and 2 or 3] or nil
+  end
 
   local function gray(value)
     love.graphics.setColor(value, value, value, 1)
@@ -172,6 +180,56 @@ return function(mod)
       end
     end
     return inkShader or nil
+  end
+
+  local function stripGenderSuffix(text)
+    text = tostring(text or "")
+    if not genderExports then return text end
+    -- Gender Mod strips the baked-in NIDORAN symbols while its classic
+    -- renderer is active. Its screen wrapper is deliberately replaced here,
+    -- so retain that presentation detail locally without mutating the mon.
+    local plain = text:gsub("\226\153[\128\130]%s*$", "")
+    if plain == text then plain = text:gsub("[♂♀]%s*$", "") end
+    return plain
+  end
+
+  local function drawGenderGlyph(mon, x, y, background, trueColorRegions)
+    if not (genderExports and type(genderExports.genderOf) == "function"
+        and type(genderExports.symbol) == "function") then
+      return 0
+    end
+    local okGender, gender = pcall(genderExports.genderOf, mon)
+    if not okGender then return 0 end
+    local okSymbol, symbol = pcall(genderExports.symbol, gender)
+    if not okSymbol or type(symbol) ~= "string" or symbol == "" then return 0 end
+
+    local color = { 0, 0, 0, 1 }
+    if type(genderExports.palette) == "function" then
+      local okPalette, exported = pcall(genderExports.palette, gender)
+      if okPalette and type(exported) == "table" then color = exported end
+    end
+
+    x, y = math.floor(x), math.floor(y)
+    love.graphics.push("all")
+    -- True-colour regions are re-blitted without the card palette. Give the
+    -- glyph a final-colour backing (plus a one-pixel guard) so transparent
+    -- pixels and outward-rounded scissor edges cannot expose the raw grey
+    -- card underneath.
+    if background then
+      love.graphics.setColor(background[1] / 255, background[2] / 255,
+        background[3] / 255, 1)
+      love.graphics.rectangle("fill", x - 1, y - 1, 10, 10)
+    end
+    local shader = shaderForInk()
+    if shader then love.graphics.setShader(shader) end
+    love.graphics.setColor(color[1] or 0, color[2] or 0, color[3] or 0,
+      color[4] or 1)
+    Font.draw(symbol, x, y)
+    love.graphics.pop()
+    trueColorRegions[#trueColorRegions + 1] = {
+      x = x - 1, y = y - 1, w = 10, h = 10,
+    }
+    return 9
   end
 
   -- The ROM font is an 8x8 tile font. Scaling it by fractions makes strokes
@@ -498,14 +556,11 @@ return function(mod)
     -- behind the transparent pixels first, so that restore cannot reveal the
     -- raw gray pre-palette card as a square backplate.
     if trueColorIcon then
-      local palette = cardPalette(menu, mon)
-        or PaletteFX.pal(menu.game.data, "BLUEMON")
-      local effective = PaletteFX.effectiveColors(palette)
-      local background = effective and effective[selected and 2 or 3]
+      local background = cardFaceColor(menu, mon, selected)
       if background then
         love.graphics.setColor(background[1] / 255, background[2] / 255,
           background[3] / 255, 1)
-        love.graphics.rectangle("fill", iconX, iconY, 16, 16)
+        love.graphics.rectangle("fill", iconX - 1, iconY - 1, 18, 18)
       end
     end
 
@@ -514,15 +569,19 @@ return function(mod)
       selected and setting("animate_icons", true), menu.blink or 0)
     if trueColorIcon then
       trueColorIcons[#trueColorIcons + 1] = {
-        x = iconX, y = iconY, w = 16, h = 16,
+        x = iconX - 1, y = iconY - 1, w = 18, h = 18,
       }
     end
 
-    drawText(mon.nickname or def.name or mon.species or "?",
+    drawText(stripGenderSuffix(
+        mon.nickname or def.name or mon.species or "?"),
       textX, nameY, x + width - 5 - textX, 1, ink)
     local level = tostring(math.max(1, tonumber(mon.level) or 1))
+    local genderWidth = drawGenderGlyph(mon, textX, detailY,
+      cardFaceColor(menu, mon, selected), trueColorIcons)
     drawText((spacious and "LV" or "L") .. level,
-      textX, detailY, math.max(24, width * 0.33), 1, ink)
+      textX + genderWidth, detailY,
+      math.max(24, width * 0.33) - genderWidth, 1, ink)
 
     local badge
     if menu.tmhm then

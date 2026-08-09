@@ -1,7 +1,7 @@
 {
   "id": "modern_party_ui",
   "name": "Modern Party UI",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "github": "piftee/gen1recomp-modern-party-ui",
   "api": 2,
   "entry": "main.lua",
@@ -10,7 +10,7 @@
   "category": "UI",
   "priority": 100,
   "dependencies": [],
-  "optional_dependencies": [],
+  "optional_dependencies": ["gender_mod"],
   "conflicts": [],
   "incompatible": [],
   "permissions": ["engine_internals"],

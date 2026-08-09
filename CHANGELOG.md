@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.2 - 2026-08-09
+
+- Removed grey squares behind Gender Mod markers by backing their transparent pixels with the card's final type colour.
+- Added matching one-pixel guards around protected gender markers, menu icons and summary artwork so outward-rounded rendering cannot reveal grey seams.
+- Kept the Pokémon and gender artwork itself unchanged.
+
+## 0.3.1 - 2026-08-09
+
+- Added explicit compatibility with Gender Mod 0.3.5 so both mods load without competing for `PartyMenu` or `SummaryMenu`.
+- Kept Modern Party UI as the responsive presentation while resolving gender, symbols and colours through Gender Mod's public exports.
+- Added gender markers directly before the level on modern party cards and the stats summary.
+- Preserved Gender Mod's gender locking, GENDER-OOZE, battle HUD markers, nickname screen and PC labels.
+- Continued replacing baked-in Nidoran gender suffixes with the dedicated marker when both mods are enabled.
+
 ## 0.3.0 - 2026-08-09
 
 - Rebuilt both Pokémon summary pages with the party screen's chamfered card styling, type colours, pixel backdrop and clear information hierarchy.
