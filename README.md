@@ -1,8 +1,9 @@
 # Modern Party UI
 
-Modern Party UI rebuilds the POKéMON party screen as a responsive two-column
-card grid while keeping Gen 1's own font and animated menu icons. Party cards
-now use a cohesive primary-type palette shared with Typed Move Colors.
+Modern Party UI rebuilds the POKéMON party screen and both Pokémon summary
+pages with responsive cards while keeping Gen 1's own font, sprites and
+animated menu icons. Party and summary cards use a cohesive primary-type
+palette shared with Typed Move Colors.
 
 **Persona: the nostalgic modernizer.** It is for players who want the clearer
 information hierarchy of newer Pokémon games without importing art from a
@@ -33,10 +34,17 @@ Red, Blue, or Yellow ROM imported into
 - action menus use a centered card overlay with a highlighted action
 - the UI expands horizontally to use the full available integer-scaled surface;
   wide displays get broader cards rather than a centered 160px strip
+- the STATS summary page uses a responsive profile rail, HP/status card and
+  four clear stat cards
+- the MOVES summary page adds a labelled EXP meter and type-coloured move cards
+  with current/max PP
+- wide summaries arrange moves two-by-two; compact and portrait summaries stack
+  them so names, type abbreviations and PP never overlap
 
 The mod replaces presentation only. Field moves, battle switching, item targeting,
 TM/HM checks, healing animations, trades, callbacks and cursor persistence are
-still handled by the engine's original `PartyMenu` controller.
+still handled by the engine's original `PartyMenu` controller. Summary page
+changes and closing remain handled by the original `SummaryMenu` controller.
 
 ## Settings
 
@@ -103,6 +111,10 @@ Mods that replace the entire `PartyMenu` screen conflict by design because two
 screen implementations cannot own the same screen id. The manager reports that
 conflict instead of silently choosing one.
 
+The summary renderer uses the sprite already resolved by Gen1Recomp, including
+`pokemon.sprite` hooks and content-mod sprite paths. Authored true-colour sprites
+are protected from palette recolouring at their live responsive position.
+
 ## Develop it
 
 Clone this repository into the `mods` directory of a Gen1Recomp checkout:
@@ -126,11 +138,12 @@ Open **POKéMON** from the Start menu. While developing, press **F5** to reload.
 ## Compatibility
 
 This mod declares `engine_internals` because the public UI kit does not expose the
-built-in party controller. It delegates to that controller and overrides only
-`draw` and `sgbPalettes`; this keeps the behavior surface deliberately small.
+built-in party and summary controllers. It delegates to those controllers and
+overrides only their presentation and responsive surface methods; this keeps the
+behavior surface deliberately small.
 
-Another mod that also registers the `PartyMenu` screen id will conflict at load
-time instead of silently winning.
+Another mod that also registers the `PartyMenu` or `SummaryMenu` screen id will
+conflict at load time instead of silently winning.
 
 ## Distribution
 

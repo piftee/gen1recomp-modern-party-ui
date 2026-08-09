@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 - 2026-08-09
+
+- Rebuilt both Pokémon summary pages with the party screen's chamfered card styling, type colours, pixel backdrop and clear information hierarchy.
+- Added a responsive profile rail with the live front sprite, Pokédex number, typing, original trainer and trainer ID.
+- Added modern HP, status and four-stat cards to the first summary page.
+- Added a labelled blue EXP meter and type-coloured move cards with PP to the second summary page.
+- Made moves use a two-by-two grid on wide displays and a readable stacked layout on narrow or portrait displays.
+- Grouped stat labels, values and move details around each card's visual centre on wide displays.
+- Removed the coloured rectangle behind summary artwork while retaining light-coloured details enclosed inside each Pokémon's outline.
+- Preserved the original A/B page flow, PC-box summaries, cry, live stats, PP Ups, custom move records, sprite replacements and true-colour sprite handling.
+
 ## 0.2.5 - 2026-08-08
 
 - Added reference-matched primary-type colours as the default party-card style.

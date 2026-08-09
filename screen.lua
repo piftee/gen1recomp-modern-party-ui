@@ -8,6 +8,7 @@ return function(mod)
   local Font = require("src.render.Font")
   local Growth = require("src.pokemon.Growth")
   local PaletteFX = require("src.render.PaletteFX")
+  local Renderer = require("src.render.Renderer")
   local Theme = require("src.ui.Theme")
 
   local SCREEN_H = 144
@@ -98,7 +99,8 @@ return function(mod)
     end
     width, height = tonumber(width) or 160, tonumber(height) or SCREEN_H
     local scale = math.max(1, math.floor(height / SCREEN_H))
-    return math.max(160, math.floor(width / scale))
+    return math.min(Renderer.MAX_UI_WIDTH or 640,
+      math.max(160, math.floor(width / scale)))
   end
 
   local function uiSize()
