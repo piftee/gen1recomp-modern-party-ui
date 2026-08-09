@@ -1,0 +1,14 @@
+{
+  "id": "gender_mod",
+  "name": "Gender Mod Compatibility Fixture",
+  "version": "0.3.5",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "game_version": ">=0.0.0-0 <2.0.0",
+  "priority": 50,
+  "permissions": ["engine_internals"],
+  "dependencies": [],
+  "optional_dependencies": [],
+  "conflicts": []
+}

@@ -107,9 +107,15 @@ palette lookup. The default **Type** option changes only the card surface; icon
 pixels still come from the shared renderer and authored true-colour icons stay
 untouched.
 
-Mods that replace the entire `PartyMenu` screen conflict by design because two
-screen implementations cannot own the same screen id. The manager reports that
-conflict instead of silently choosing one.
+Gender Mod 0.3.5 is an explicit exception to full-screen conflicts. When both
+mods are enabled, Modern Party UI owns the responsive party and summary
+presentation and reads each Pokémon's gender, marker and marker colour through
+Gender Mod's public exports. Gender locking, GENDER-OOZE, battle markers,
+nickname handling and PC labels remain owned by Gender Mod.
+
+Other mods that replace an entire `PartyMenu` or `SummaryMenu` still conflict
+unless an explicit composition adapter is available. Menu-icon, sprite and
+data-only Pokémon mods continue to compose through the shared engine helpers.
 
 The summary renderer uses the sprite already resolved by Gen1Recomp, including
 `pokemon.sprite` hooks and content-mod sprite paths. Authored true-colour sprites
@@ -142,8 +148,11 @@ built-in party and summary controllers. It delegates to those controllers and
 overrides only their presentation and responsive surface methods; this keeps the
 behavior surface deliberately small.
 
-Another mod that also registers the `PartyMenu` or `SummaryMenu` screen id will
-conflict at load time instead of silently winning.
+Gender Mod 0.3.5 is listed as an optional dependency so it initializes first.
+Modern Party UI then intentionally replaces only its classic party and summary
+records and renders responsive gender markers via its public inter-mod API.
+Another mod that registers either screen id still conflicts unless Modern Party
+UI has a dedicated adapter for it.
 
 ## Distribution
 

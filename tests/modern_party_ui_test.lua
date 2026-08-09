@@ -206,7 +206,7 @@ graphics.scale = function(x, y)
   fractionalScales[#fractionalScales + 1] = { x = x, y = y }
 end
 graphics.rectangle = function(mode, x, y, w, h)
-  if mode == "fill" and w == 16 and h == 16 then
+  if mode == "fill" and w == 18 and h == 18 then
     local r, g, b = graphics.getColor()
     iconBackgrounds[#iconBackgrounds + 1] = { r = r, g = g, b = b }
   end
@@ -243,10 +243,10 @@ T.eq(iconCalls[1].y, 21,
   "the icon is vertically centered above the meter rows")
 T.eq(#trueColorMarks, 2,
   "authored replacement icons are protected from the card palette")
-T.eq(trueColorMarks[1].x, 5,
-  "true-colour protection follows the first card's icon position")
-T.eq(trueColorMarks[1].y, 21,
-  "true-colour protection follows the first card's icon row")
+T.eq(trueColorMarks[1].x, 4,
+  "true-colour protection includes the first icon's seam guard")
+T.eq(trueColorMarks[1].y, 20,
+  "the icon seam guard follows its responsive card row")
 T.eq(#iconBackgrounds, 2,
   "replacement icon transparency receives a colour-matched card backing")
 T.eq(iconBackgrounds[1].g, 208 / 255,
@@ -439,6 +439,11 @@ T.check(summaryOK,
   "the modern stats summary draws headlessly: " .. tostring(summaryErr))
 T.eq(#summaryMarks, 1,
   "the sprite-only colour result is protected from the card palette")
+local protectedSpriteW, protectedSpriteH = summary.sprite:getDimensions()
+T.eq(summaryMarks[1].w, protectedSpriteW + 2,
+  "summary artwork protection includes a horizontal seam guard")
+T.eq(summaryMarks[1].h, protectedSpriteH + 2,
+  "summary artwork protection includes a vertical seam guard")
 local attackLabel, attackValue
 for i, call in ipairs(summaryText) do
   if call.text == "ATTACK" then
@@ -535,5 +540,105 @@ T.eq(chosen, party[1], "forced battle selection returns the focused mon")
 T.check(stack:top() ~= forced, "forced battle selection closes the picker")
 
 run.release()
+PaletteFX.setMode(previousMode)
+
+-- Gender Mod 0.3.5 registers complete classic PartyMenu and SummaryMenu
+-- records. Modern Party UI must intentionally replace those two records,
+-- keep its responsive controllers, and consume Gender Mod's public exports
+-- so gender remains visible on both modern surfaces.
+local compatData = T.fixtures.fresh()
+compatData.icons = data.icons
+compatData.palettes = data.palettes
+Font.load(compatData)
+PaletteFX.setMode("gbc")
+local genderRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/gender_mod",
+  "mods/modern_party_ui",
+}, { data = compatData, dev = true })
+T.eq(#genderRun.errors, 0,
+  "loads beside Gender Mod 0.3.5 without a screen-registry collision")
+
+local genderRecord = genderRun.data.screens.PartyMenu
+local genderSummaryRecord = genderRun.data.screens.SummaryMenu
+local genderMon = mon("FIXMON_A", "NIDORAN♂", 12, 45, 45)
+genderMon.gender_mod = "M"
+local genderGame = {
+  data = genderRun.data,
+  save = { party = { genderMon }, inventory = {}, options = {} },
+  stack = stack,
+  input = input,
+}
+local genderScreen = genderRecord.new(genderGame, {})
+T.check(genderScreen.modernPartyUI == true,
+  "Modern Party UI remains the party presentation when Gender Mod is enabled")
+local genderText, genderBackings, genderMarks = {}, {}, {}
+Font.draw = function(text, x, y)
+  genderText[#genderText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+graphics.rectangle = function(mode, x, y, w, h)
+  if mode == "fill" and w == 10 and h == 10 then
+    local r, g, b = graphics.getColor()
+    genderBackings[#genderBackings + 1] = { r = r, g = g, b = b }
+  end
+  return realRectangle(mode, x, y, w, h)
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  genderMarks[#genderMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+local genderPartyOK, genderPartyErr = pcall(genderScreen.draw, genderScreen)
+Font.draw = realFontDraw
+graphics.rectangle = realRectangle
+PaletteFX.markTrueColor = realMarkTrueColor
+T.check(genderPartyOK,
+  "the gender-aware modern party draws: " .. tostring(genderPartyErr))
+local partyGlyph, strippedPartyName
+for _, call in ipairs(genderText) do
+  if call.text == "♂" then partyGlyph = call end
+  if call.text:match("^NIDOR")
+      and not call.text:find("♂", 1, true)
+      and not call.text:find("♀", 1, true) then
+    strippedPartyName = call
+  end
+end
+T.check(partyGlyph and partyGlyph.x == 23,
+  "the exported gender glyph sits directly before the modern level row")
+T.check(strippedPartyName ~= nil,
+  "the gender glyph replaces the nickname's baked-in symbol")
+T.check(genderBackings[1] and genderBackings[1].g > genderBackings[1].r
+    and genderBackings[1].g > genderBackings[1].b,
+  "the gender marker backing matches the final Grass card instead of grey")
+local guardedGenderMark
+for _, rect in ipairs(genderMarks) do
+  if rect.w == 10 and rect.h == 10 then guardedGenderMark = rect break end
+end
+T.check(guardedGenderMark ~= nil,
+  "gender true-colour protection includes a one-pixel seam guard")
+
+local genderSummary = genderSummaryRecord.new(genderGame, genderMon)
+T.check(genderSummary.modernPartySummary == true,
+  "Modern Party UI remains the summary presentation with Gender Mod")
+local summaryGenderText = {}
+Font.draw = function(text, x, y)
+  summaryGenderText[#summaryGenderText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local genderSummaryOK, genderSummaryErr = pcall(
+  genderSummary.draw, genderSummary)
+Font.draw = realFontDraw
+T.check(genderSummaryOK,
+  "the gender-aware modern summary draws: " .. tostring(genderSummaryErr))
+local summaryGlyph
+for _, call in ipairs(summaryGenderText) do
+  if call.text == "♂" then summaryGlyph = call break end
+end
+T.check(summaryGlyph ~= nil,
+  "the modern summary renders Gender Mod's exported marker")
+local genderCalls = genderRun.loader.exports.gender_mod.calls
+T.check(genderCalls.gender >= 2 and genderCalls.symbol >= 2
+    and genderCalls.palette >= 2,
+  "party and summary markers are resolved through Gender Mod's public API")
+
+genderRun.release()
 PaletteFX.setMode(previousMode)
 T.finish("modern_party_ui")

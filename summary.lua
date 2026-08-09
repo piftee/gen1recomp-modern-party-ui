@@ -3,7 +3,7 @@
 -- Page changes and closing remain owned by the original controller. This
 -- module replaces only drawing, palette zones and the logical UI width so a
 -- summary opened from the party, a PC box or another mod behaves identically.
-return function(mod)
+return function(mod, genderExports)
   local Font = require("src.render.Font")
   local Growth = require("src.pokemon.Growth")
   local PaletteFX = require("src.render.PaletteFX")
@@ -119,6 +119,46 @@ return function(mod)
       end
     end
     return inkShader or nil
+  end
+
+  local function stripGenderSuffix(text)
+    text = tostring(text or "")
+    if not genderExports then return text end
+    local plain = text:gsub("\226\153[\128\130]%s*$", "")
+    if plain == text then plain = text:gsub("[♂♀]%s*$", "") end
+    return plain
+  end
+
+  local function drawGenderGlyph(mon, x, y, background)
+    if not (genderExports and type(genderExports.genderOf) == "function"
+        and type(genderExports.symbol) == "function") then
+      return 0
+    end
+    local okGender, gender = pcall(genderExports.genderOf, mon)
+    if not okGender then return 0 end
+    local okSymbol, symbol = pcall(genderExports.symbol, gender)
+    if not okSymbol or type(symbol) ~= "string" or symbol == "" then return 0 end
+
+    local color = { 0, 0, 0, 1 }
+    if type(genderExports.palette) == "function" then
+      local okPalette, exported = pcall(genderExports.palette, gender)
+      if okPalette and type(exported) == "table" then color = exported end
+    end
+    x, y = math.floor(x), math.floor(y)
+    love.graphics.push("all")
+    if background then
+      love.graphics.setColor(background[1] / 255, background[2] / 255,
+        background[3] / 255, 1)
+      love.graphics.rectangle("fill", x - 1, y - 1, 10, 10)
+    end
+    local shader = shaderForInk()
+    if shader then love.graphics.setShader(shader) end
+    love.graphics.setColor(color[1] or 0, color[2] or 0, color[3] or 0,
+      color[4] or 1)
+    Font.draw(symbol, x, y)
+    love.graphics.pop()
+    PaletteFX.markTrueColor(x - 1, y - 1, 10, 10)
+    return 9
   end
 
   local function fitText(text, maxWidth)
@@ -246,7 +286,8 @@ return function(mod)
     love.graphics.rectangle("fill", 0, HEADER_H - 2, layout.width, 2)
     drawText(('%d/2'):format(summary.page or 1), 4, 4, 24, WHITE)
     local def = definition(summary)
-    local name = summary.mon.nickname or def.name or summary.mon.species or "?"
+    local name = stripGenderSuffix(
+      summary.mon.nickname or def.name or summary.mon.species or "?")
     local nameLeft, nameRight = 36, layout.width - 52
     local maxName = math.max(24, nameRight - nameLeft)
     local shown = fitText(name, maxName)
@@ -357,7 +398,7 @@ return function(mod)
       local face = faceColors[2] or { 170, 170, 170 }
       love.graphics.setColor(face[1] / 255, face[2] / 255,
         face[3] / 255, 1)
-      love.graphics.rectangle("fill", x, y, sw, sh)
+      love.graphics.rectangle("fill", x - 1, y - 1, sw + 2, sh + 2)
 
       local image, paletteBaked = profileSprite(summary)
       local shader
@@ -377,7 +418,10 @@ return function(mod)
       -- presentation detail and the live sprite supplied by other mods.
       love.graphics.draw(image, x + sw, y, 0, -1, 1)
       if shader then love.graphics.setShader() end
-      PaletteFX.markTrueColor(x, y, sw, sh)
+      -- Renderer scissors are rounded outward in physical pixels. Protect a
+      -- matching one-pixel guard as well as the sprite canvas so the bare
+      -- re-blit cannot reveal a grey seam around the artwork.
+      PaletteFX.markTrueColor(x - 1, y - 1, sw + 2, sh + 2)
     end
 
     local compact = layout.railW < 72
@@ -415,7 +459,11 @@ return function(mod)
     local mon = summary.mon
     local x, y, w, h = layout.mainX, layout.mainY, layout.mainW, 42
     drawCard(x, y, w, h, true)
-    drawText("LV" .. tostring(mon.level or 1), x + 5, y + 5, 48, BLACK)
+    local faceColors = PaletteFX.effectiveColors(primaryPalette(summary))
+    local genderWidth = drawGenderGlyph(mon, x + 5, y + 5,
+      faceColors and faceColors[2] or nil)
+    drawText("LV" .. tostring(mon.level or 1),
+      x + 5 + genderWidth, y + 5, 48 - genderWidth, BLACK)
     local status = (mon.hp or 0) <= 0 and "FNT" or mon.status or "OK"
     drawTextRight(tostring(status), x + w - 5, y + 5, 40, BLACK)
     local maxHP = mon.stats and mon.stats.hp or math.max(1, mon.hp or 1)
