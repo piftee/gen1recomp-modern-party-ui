@@ -8,5 +8,9 @@ tests/fixtures/dv_tracker/main.lua
 tests/fixtures/dv_tracker/manifest.json
 tests/fixtures/legacy_screen_skin/main.lua
 tests/fixtures/legacy_screen_skin/manifest.json
+tests/fixtures/kanto_ribbons/main.lua
+tests/fixtures/kanto_ribbons/manifest.json
+tests/fixtures/gen1_modern_ui/main.lua
+tests/fixtures/gen1_modern_ui/manifest.json
 .gitignore
 .github/

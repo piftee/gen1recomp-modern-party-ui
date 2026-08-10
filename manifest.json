@@ -1,7 +1,7 @@
 {
   "id": "modern_party_ui",
   "name": "Modern Party UI",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "github": "piftee/gen1recomp-modern-party-ui",
   "api": 2,
   "entry": "main.lua",
@@ -13,6 +13,8 @@
   "optional_dependencies": [
     "gender_mod",
     "dv_tracker",
+    "kanto_ribbons",
+    "gen1_modern_ui",
     "crystal_animated_sprites_with_shiny_visuals",
     "unique_menu_icons",
     "Gold_Silver_Sprites"

@@ -641,9 +641,144 @@ T.check(genderCalls.gender >= 2 and genderCalls.symbol >= 2
 
 genderRun.release()
 
+-- Kanto Ribbons 0.18.0 owns the icon-rich screen after the last summary
+-- page, while Gen1 Modern UI 0.8.4 can otherwise suppress and redraw ordinary
+-- PartyMenu/SummaryMenu states. Modern Party UI publishes an explicit source
+-- adapter that asks Gen1 Modern UI to preserve these custom renderers, and it
+-- hands the native controller to Kanto Ribbons deterministically.
+local ribbonData = T.fixtures.fresh()
+ribbonData.icons = data.icons
+ribbonData.palettes = data.palettes
+Font.load(ribbonData)
+PaletteFX.setMode("gbc")
+local ribbonRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/gen1_modern_ui",
+  "mods/modern_party_ui/tests/fixtures/kanto_ribbons",
+  "mods/modern_party_ui",
+}, { data = ribbonData, dev = true })
+T.eq(#ribbonRun.errors, 0,
+  "loads beside Kanto Ribbons and Gen1 Modern UI")
+
+local ribbonMon = mon("FIXMON_A", "DECORATED", 18, 52, 52)
+ribbonMon.ribbons = {
+  STARTER = true, HALL_OF_FAME = true, RARE = true,
+  EFFORT = true, EARTH = true,
+}
+local ribbonGame = {
+  data = ribbonRun.data,
+  save = { party = { ribbonMon }, inventory = {}, options = {} },
+  stack = stack,
+  input = input,
+  renderer = { uiSize = function() return 256, 144 end },
+}
+local ribbonParty = ribbonRun.data.screens.PartyMenu.new(ribbonGame, {})
+local ribbonSummary = ribbonRun.data.screens.SummaryMenu.new(
+  ribbonGame, ribbonMon)
+T.check(ribbonSummary.kantoRibbonsCompatible == true,
+  "the summary reports its Kanto Ribbons handoff")
+T.eq(ribbonSummary.pageCount, 2,
+  "Kanto Ribbons follows the two native pages when DV Tracker is absent")
+
+local modernUiExports = ribbonRun.loader.exports.gen1_modern_ui
+local registrations = modernUiExports.registrations or {}
+T.eq(#registrations, 1,
+  "Modern Party UI registers one public Gen1 Modern UI contract")
+T.eq(registrations[1].owner, "modern_party_ui",
+  "the Gen1 Modern UI contract remains owned by the source mod")
+T.check(registrations[1].contract
+    == ribbonRun.loader.exports.modern_party_ui.gen1ModernUi,
+  "the registered contract is the same table published in public exports")
+T.eq(modernUiExports.shouldSuppress(ribbonParty), false,
+  "Gen1 Modern UI leaves the responsive party renderer visible")
+T.eq(modernUiExports.shouldSuppress(ribbonSummary), false,
+  "Gen1 Modern UI leaves the responsive summary renderer visible")
+T.eq(modernUiExports.shouldSuppress({ screenId = "OptionsMenu" }), nil,
+  "the adapter does not interfere with other Gen1 Modern UI screens")
+
+ribbonSummary.page = 2
+local ribbonText = {}
+Font.draw = function(text, x, y)
+  ribbonText[#ribbonText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local ribbonDrawOK, ribbonDrawErr = pcall(ribbonSummary.draw, ribbonSummary)
+Font.draw = realFontDraw
+T.check(ribbonDrawOK,
+  "the final move page draws before the ribbon handoff: "
+    .. tostring(ribbonDrawErr))
+local sawRibbonHint
+for _, call in ipairs(ribbonText) do
+  if call.text == "A/B RIBBONS" then sawRibbonHint = true break end
+end
+T.check(sawRibbonHint,
+  "the final summary footer clearly advertises Kanto Ribbons")
+
+while stack:top() do stack:pop() end
+stack:push(ribbonSummary)
+input.pressed.a = true
+ribbonSummary:update(0)
+input.pressed.a = nil
+T.check(stack:top() and stack:top().modernPartyRibbons == true,
+  "A on the final summary page opens Kanto Ribbons exactly once")
+T.eq(stack:top() and stack:top().mon, ribbonMon,
+  "the Kanto Ribbons detail screen receives the selected Pokémon")
+local modernRibbonScreen = stack:top()
+T.eq(modernUiExports.shouldSuppress(modernRibbonScreen), false,
+  "Gen1 Modern UI also preserves the cohesive ribbon renderer")
+T.eq(select(1, modernRibbonScreen:uiSize()), 256,
+  "the ribbon screen uses the same responsive width as the summary")
+local modernRibbonText = {}
+Font.draw = function(text, x, y)
+  modernRibbonText[#modernRibbonText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local modernRibbonOK, modernRibbonErr = pcall(
+  modernRibbonScreen.draw, modernRibbonScreen)
+Font.draw = realFontDraw
+T.check(modernRibbonOK,
+  "the modern ribbon cards draw: " .. tostring(modernRibbonErr))
+local sawRibbonTitle, sawStarter, sawRibbonDescription, sawScrollHint
+for _, call in ipairs(modernRibbonText) do
+  if call.text == "RIBBONS" then sawRibbonTitle = true end
+  if call.text == "STARTER" then sawStarter = true end
+  if call.text == "FIRST PARTNER." then sawRibbonDescription = true end
+  if call.text == "UP/DOWN SCROLL    A/B BACK" then sawScrollHint = true end
+end
+T.check(sawRibbonTitle and sawStarter and sawRibbonDescription,
+  "the cohesive screen keeps ribbon names and descriptions")
+T.check(sawScrollHint,
+  "the widescreen footer explains the original scrolling controls")
+local modernRibbonZones = modernRibbonScreen:sgbPalettes(ribbonGame) or {}
+T.eq(#modernRibbonZones, 6,
+  "the ribbon profile and four visible cards receive cohesive colour zones")
+T.check(modernRibbonZones[3].x ~= modernRibbonZones[4].x,
+  "wide ribbon cards use the responsive two-column layout")
+ribbonGame.renderer = { uiSize = function() return 160, 144 end }
+local compactRibbonZones = modernRibbonScreen:sgbPalettes(ribbonGame) or {}
+T.eq(compactRibbonZones[3].x, compactRibbonZones[4].x,
+  "compact ribbon cards stack without squeezing their text")
+local compactRibbonOK, compactRibbonErr = pcall(
+  modernRibbonScreen.draw, modernRibbonScreen)
+T.check(compactRibbonOK,
+  "the cohesive ribbon screen draws at 160x144: "
+    .. tostring(compactRibbonErr))
+ribbonGame.renderer = { uiSize = function() return 256, 144 end }
+input.pressed.down = true
+modernRibbonScreen:update(0)
+input.pressed.down = nil
+T.eq(modernRibbonScreen.scroll, 1,
+  "the restyled ribbon screen retains Kanto Ribbons scrolling")
+input.pressed.b = true
+modernRibbonScreen:update(0)
+input.pressed.b = nil
+T.check(stack:top() ~= modernRibbonScreen,
+  "the restyled ribbon screen retains Kanto Ribbons back behavior")
+
+ribbonRun.release()
+
 -- DV Tracker 1.0.0 owns a third native-controller page. Modern Party UI
 -- should keep its exact A/B page flow, draw all DV/Stat EXP values in modern
--- responsive cards, and never fall through to a duplicate moves page.
+-- responsive cards, and hand the composed final page to Kanto Ribbons.
 local dvDataFixture = T.fixtures.fresh()
 dvDataFixture.icons = data.icons
 dvDataFixture.palettes = data.palettes
@@ -651,12 +786,14 @@ Font.load(dvDataFixture)
 PaletteFX.setMode("gbc")
 local dvRun = T.sdk.loadMods({
   "mods/modern_party_ui/tests/fixtures/dv_tracker",
+  "mods/modern_party_ui/tests/fixtures/kanto_ribbons",
+  "mods/modern_party_ui/tests/fixtures/gen1_modern_ui",
   "mods/modern_party_ui/tests/fixtures/legacy_screen_skin",
   "mods/modern_party_ui/tests/fixtures/crystal_sprites",
   "mods/modern_party_ui",
 }, { data = dvDataFixture, dev = true })
 T.eq(#dvRun.errors, 0,
-  "loads beside the DV Tracker and Crystal sprite controller contracts")
+  "loads beside DV Tracker, Kanto Ribbons, Gen1 Modern UI and Crystal")
 
 local dvRecord = dvRun.data.screens.SummaryMenu
 local stackedPartyRecord = dvRun.data.screens.PartyMenu
@@ -682,8 +819,12 @@ T.check(dvSummary.modernPartySummary == true,
   "an unknown earlier SummaryMenu record cannot disable the modern summary")
 T.eq(dvSummary.modernSummaryPages, 3,
   "DV Tracker expands the modern summary to three pages")
+T.eq(dvSummary.pageCount, 3,
+  "the composed page count keeps Kanto Ribbons after the DV page")
 T.check(dvSummary.dvTrackerCompatible == true,
   "the summary reports its active DV Tracker adapter")
+T.check(dvSummary.kantoRibbonsCompatible == true,
+  "the summary reports its active Kanto Ribbons adapter")
 T.check(dvSummary.crystalAnimatedSprite == true
     and dvSummary.spriteTrueColor == true,
   "the live Crystal animated summary sprite remains installed")
@@ -702,7 +843,8 @@ T.check(dvDrawOK,
   "the modern DV page draws responsively: " .. tostring(dvDrawErr))
 T.check(not dvSummary.dvTrackerClassicDrawn,
   "the classic fixed-width DV renderer does not replace the modern page")
-local sawPage, sawTitle, sawHpDv, sawHpExp, sawAttackDv, sawAttackExp
+local sawPage, sawTitle, sawHpDv, sawHpExp, sawAttackDv, sawAttackExp,
+  sawComposedRibbonHint
 for _, call in ipairs(dvText) do
   if call.text == "3/3" then sawPage = true end
   if call.text == "DVS" then sawTitle = true end
@@ -710,11 +852,16 @@ for _, call in ipairs(dvText) do
   if call.text == "EXP 4321" then sawHpExp = true end
   if call.text:find("DV15", 1, true) then sawAttackDv = true end
   if call.text == "EXP 1234" then sawAttackExp = true end
+  if call.text == "A/B RIBBONS" then sawComposedRibbonHint = true end
 end
 T.check(sawPage and sawTitle,
   "the compatibility page has a clear three-page DV header")
 T.check(sawHpDv and sawHpExp and sawAttackDv and sawAttackExp,
   "HP and core-stat DV/Stat EXP values are all rendered")
+T.check(sawComposedRibbonHint,
+  "the DV page advertises the following Kanto Ribbons screen")
+T.eq(dvRun.loader.exports.gen1_modern_ui.shouldSuppress(dvSummary), false,
+  "Gen1 Modern UI preserves the composed DV and ribbons summary renderer")
 local dvZones = dvSummary:sgbPalettes(dvGame) or {}
 T.eq(#dvZones, 3,
   "the DV page keeps the responsive base, profile and highlighted HP cards")
@@ -739,10 +886,12 @@ T.eq(dvSummary.page, 3, "DV flow advances from moves to the DV page")
 input.pressed.a = true
 dvSummary:update(0)
 input.pressed.a = nil
-T.check(stack:top() ~= dvSummary,
-  "DV flow closes only after the third page")
+T.check(stack:top() and stack:top().modernPartyRibbons == true,
+  "DV flow opens Kanto Ribbons only after the third page")
+T.eq(stack:top() and stack:top().mon, dvMon,
+  "the composed handoff retains the tracked Pokémon")
 T.eq(dvSummary.crystalUpdateCalls, 3,
-  "Crystal's animation update wraps all three DV navigation steps")
+  "Crystal's animation update still wraps all three navigation steps")
 
 dvRun.release()
 PaletteFX.setMode(previousMode)

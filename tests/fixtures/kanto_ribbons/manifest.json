@@ -1,0 +1,10 @@
+{
+  "id": "kanto_ribbons",
+  "name": "Kanto Ribbons Compatibility Fixture",
+  "version": "0.18.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "priority": 100,
+  "permissions": ["engine_internals"]
+}

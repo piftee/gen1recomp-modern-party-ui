@@ -116,8 +116,13 @@ return function(mod)
 
   local genderMod = mod.find("gender_mod")
   local genderExports = genderMod and genderMod.exports or nil
+  local gen1ModernUi = mod.find("gen1_modern_ui")
+  local kantoRibbons = mod.find("kanto_ribbons")
   local compatibility = {
     dvTracker = mod.find("dv_tracker") ~= nil,
+    kantoRibbons = kantoRibbons ~= nil,
+    kantoRibbonsExports = kantoRibbons and kantoRibbons.exports or nil,
+    gen1ModernUi = gen1ModernUi ~= nil,
     crystalSprites = mod.find(
       "crystal_animated_sprites_with_shiny_visuals") ~= nil,
     uniqueMenuIcons = mod.find("unique_menu_icons") ~= nil,
@@ -176,10 +181,148 @@ return function(mod)
   local summary = loadScreen("summary.lua", "summary")
   if not summary then return end
   local replacedSummary = installScreen("SummaryMenu", summary)
+  local replacedRibbons = false
+  if compatibility.kantoRibbons then
+    local ribbons = loadScreen("ribbons.lua", "Kanto Ribbons")
+    if ribbons then
+      replacedRibbons = installScreen("KantoRibbonsDetail", ribbons)
+    end
+  end
+
+  -- Kanto Ribbons 0.18.0 opens its standalone detail screen after
+  -- the final native summary page. DV Tracker and other controller mods can
+  -- replace SummaryMenu.update after Kanto Ribbons captured it, so install a
+  -- final presentation-aware bridge after every optional dependency. Mask the
+  -- A/B edge while calling the downstream controller: animation wrappers still
+  -- receive their update tick, but no nested page wrapper can close early or
+  -- open the ribbons screen twice.
+  if compatibility.kantoRibbons then
+    local SummaryMenu = require("src.ui.SummaryMenu")
+    local downstreamUpdate = SummaryMenu.update
+    SummaryMenu.update = function(self, dt)
+      local input = self and self.game and self.game.input
+      local finalPage = tonumber(self and self.modernSummaryPages)
+        or tonumber(self and self.pageCount) or 2
+      local atRibbonHandoff = self and self.modernPartySummary == true
+        and (tonumber(self.page) or 1) >= finalPage
+        and input and type(input.wasPressed) == "function"
+        and (input:wasPressed("a") or input:wasPressed("b"))
+      if not atRibbonHandoff then return downstreamUpdate(self, dt) end
+
+      local originalWasPressed = input.wasPressed
+      input.wasPressed = function(source, key)
+        if key == "a" or key == "b" then return false end
+        return originalWasPressed(source, key)
+      end
+      local ok, result = pcall(downstreamUpdate, self, dt)
+      input.wasPressed = originalWasPressed
+      if not ok then error(result, 0) end
+
+      local game = self.game
+      if game and game.stack and type(game.stack.pop) == "function" then
+        game.stack:pop()
+      end
+      mod.ui.push(game, "KantoRibbonsDetail", self.mon)
+      return result
+    end
+  end
+
+  -- Gen1 Modern UI intentionally falls back when a source screen publishes a
+  -- complete custom renderer that cannot be represented by its generic row
+  -- model. Register that relationship explicitly so its compositor never
+  -- suppresses these two screens, while it remains free to present every
+  -- other menu in the stack. The small models satisfy the public API contract;
+  -- canSuppressNative=false keeps Modern Party UI's responsive renderer in
+  -- charge and leaves all controller input source-owned.
+  mod.exports.gen1ModernUi = {
+    apiVersion = 1,
+    screens = {
+      ModernPartyRoster = {
+        match = function(state)
+          return type(state) == "table" and state.modernPartyUI == true
+        end,
+        model = function(game, state)
+          local rows = {}
+          for _, mon in ipairs(state.party
+              or (game and game.save and game.save.party) or {}) do
+            rows[#rows + 1] = {
+              label = mon.nickname or mon.species or "POKéMON",
+              value = mon.level and ("LV%d"):format(mon.level) or "",
+            }
+          end
+          return {
+            title = "POKéMON",
+            rows = rows,
+            index = state.index or 1,
+            footer = { "Modern Party UI" },
+          }
+        end,
+        layer = "screen",
+        canSuppressNative = false,
+      },
+      ModernPartySummary = {
+        match = function(state)
+          return type(state) == "table"
+            and state.modernPartySummary == true
+        end,
+        model = function(_, state)
+          local titles = { "STATS", "MOVES", "DVS" }
+          return {
+            title = "SUMMARY",
+            rows = { {
+              label = titles[state.page or 1] or "SUMMARY",
+              value = state.mon and (state.mon.nickname
+                or state.mon.species) or "",
+            } },
+            index = 1,
+            footer = { "Modern Party UI" },
+          }
+        end,
+        layer = "screen",
+        canSuppressNative = false,
+      },
+      ModernPartyRibbons = {
+        match = function(state)
+          return type(state) == "table"
+            and state.modernPartyRibbons == true
+        end,
+        model = function(_, state)
+          return {
+            title = "RIBBONS",
+            rows = state.modernRibbonRows or {},
+            index = math.min(#(state.modernRibbonRows or {}),
+              (state.scroll or 0) + 1),
+            scroll = state.scroll or 0,
+            footer = { "A/B back" },
+          }
+        end,
+        layer = "screen",
+        canSuppressNative = false,
+      },
+    },
+  }
+
+  local uiExports = gen1ModernUi and gen1ModernUi.exports
+  if uiExports and type(uiExports.registerAdapter) == "function" then
+    local ok, registered, reason = pcall(uiExports.registerAdapter, {
+      owner = mod.id,
+      contract = mod.exports.gen1ModernUi,
+    })
+    if not ok or registered == false then
+      mod.log:warn("Gen1 Modern UI adapter registration failed: %s",
+        tostring(reason or registered))
+    end
+  end
 
   local adapters = {}
   if genderExports then adapters[#adapters + 1] = "Gender Mod" end
   if compatibility.dvTracker then adapters[#adapters + 1] = "DV Tracker" end
+  if compatibility.kantoRibbons then
+    adapters[#adapters + 1] = "Kanto Ribbons"
+  end
+  if compatibility.gen1ModernUi then
+    adapters[#adapters + 1] = "Gen1 Modern UI"
+  end
   if compatibility.crystalSprites then
     adapters[#adapters + 1] = "Crystal Animated Sprites"
   end
@@ -189,6 +332,8 @@ return function(mod)
   local suffix = #adapters > 0 and (" with " .. table.concat(adapters, ", "))
     or ""
   mod.log:info(
-    "modern party roster and summary enabled%s (replaced records: %s/%s)",
-    suffix, tostring(replacedParty), tostring(replacedSummary))
+    "modern party roster and summary enabled%s " ..
+      "(replaced records: %s/%s/%s)",
+    suffix, tostring(replacedParty), tostring(replacedSummary),
+    tostring(replacedRibbons))
 end

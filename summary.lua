@@ -18,6 +18,8 @@ return function(mod, genderExports, compatibility)
   local FOOTER_Y = 136
   local WHITE, LIGHT, DARK, BLACK = 1, 170 / 255, 85 / 255, 0
   local dvTracker = compatibility and compatibility.dvTracker == true
+  local kantoRibbons = compatibility and compatibility.kantoRibbons == true
+  local summaryPageCount = dvTracker and 3 or 2
 
   local TYPE_BASE_COLORS = {
     NORMAL = { 144, 152, 162 }, FIGHTING = { 206, 63, 107 },
@@ -285,7 +287,7 @@ return function(mod, genderExports, compatibility)
     love.graphics.rectangle("fill", 0, 0, layout.width, HEADER_H)
     gray(LIGHT)
     love.graphics.rectangle("fill", 0, HEADER_H - 2, layout.width, 2)
-    drawText(('%d/%d'):format(summary.page or 1, dvTracker and 3 or 2),
+    drawText(('%d/%d'):format(summary.page or 1, summaryPageCount),
       4, 4, 24, WHITE)
     local def = definition(summary)
     local name = stripGenderSuffix(
@@ -691,6 +693,8 @@ return function(mod, genderExports, compatibility)
       hint = "A/B MOVES"
     elseif summary.page == 2 and dvTracker then
       hint = "A/B DVS"
+    elseif kantoRibbons then
+      hint = "A/B RIBBONS"
     else
       hint = "A/B BACK"
     end
@@ -780,8 +784,13 @@ return function(mod, genderExports, compatibility)
       end
       summary.modernPartySummary = true
       summary.modernSummaryLayout = "responsive_cards"
-      summary.modernSummaryPages = dvTracker and 3 or 2
+      summary.modernSummaryPages = summaryPageCount
+      -- Kanto Ribbons reads pageCount to locate the last controller page.
+      -- Publish the composed total even when DV Tracker itself does not.
+      summary.pageCount = math.max(tonumber(summary.pageCount) or 2,
+        summaryPageCount)
       summary.dvTrackerCompatible = dvTracker
+      summary.kantoRibbonsCompatible = kantoRibbons
       return summary
     end,
   }
