@@ -1,0 +1,14 @@
+{
+  "id": "crystal_animated_sprites_with_shiny_visuals",
+  "name": "Crystal Animated Sprites Compatibility Fixture",
+  "version": "1.5.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "game_version": ">=0.0.0-dev <2.0.0",
+  "priority": 980,
+  "permissions": ["engine_internals"],
+  "dependencies": [],
+  "optional_dependencies": [],
+  "conflicts": []
+}

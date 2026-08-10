@@ -3,7 +3,7 @@
 -- Page changes and closing remain owned by the original controller. This
 -- module replaces only drawing, palette zones and the logical UI width so a
 -- summary opened from the party, a PC box or another mod behaves identically.
-return function(mod, genderExports)
+return function(mod, genderExports, compatibility)
   local Font = require("src.render.Font")
   local Growth = require("src.pokemon.Growth")
   local PaletteFX = require("src.render.PaletteFX")
@@ -17,6 +17,7 @@ return function(mod, genderExports)
   local HEADER_H = 16
   local FOOTER_Y = 136
   local WHITE, LIGHT, DARK, BLACK = 1, 170 / 255, 85 / 255, 0
+  local dvTracker = compatibility and compatibility.dvTracker == true
 
   local TYPE_BASE_COLORS = {
     NORMAL = { 144, 152, 162 }, FIGHTING = { 206, 63, 107 },
@@ -284,7 +285,8 @@ return function(mod, genderExports)
     love.graphics.rectangle("fill", 0, 0, layout.width, HEADER_H)
     gray(LIGHT)
     love.graphics.rectangle("fill", 0, HEADER_H - 2, layout.width, 2)
-    drawText(('%d/2'):format(summary.page or 1), 4, 4, 24, WHITE)
+    drawText(('%d/%d'):format(summary.page or 1, dvTracker and 3 or 2),
+      4, 4, 24, WHITE)
     local def = definition(summary)
     local name = stripGenderSuffix(
       summary.mon.nickname or def.name or summary.mon.species or "?")
@@ -293,7 +295,9 @@ return function(mod, genderExports)
     local shown = fitText(name, maxName)
     drawText(shown, nameLeft + (maxName - Font.width(shown)) / 2,
       3, maxName, WHITE)
-    drawTextRight(summary.page == 1 and "STATS" or "MOVES",
+    local pageTitle = summary.page == 1 and "STATS"
+      or summary.page == 2 and "MOVES" or "DVS"
+    drawTextRight(pageTitle,
       layout.width - 4, 4, 48, WHITE)
   end
 
@@ -605,10 +609,91 @@ return function(mod, genderExports)
     end
   end
 
+  -- DV Tracker 1.0.0 patches the native SummaryMenu controller to add page
+  -- three. Modern Party UI owns the instance draw method, so render that
+  -- controller page in the same responsive card language rather than
+  -- accidentally showing the moves page a second time.
+  local DV_ITEMS = {
+    { "ATTACK", "attack", "ATK" }, { "DEFENSE", "defense", "DEF" },
+    { "SPEED", "speed", "SPD" }, { "SPECIAL", "special", "SPC" },
+  }
+
+  local function dvData(mon)
+    local stats = mon and mon.stats or {}
+    local dvs = (mon and (mon.dvs or mon.ivs))
+      or stats.dvs or stats.ivs or {}
+    local statExp = mon and mon.statExp or {}
+    local hp = dvs.hp
+    if hp == nil then
+      hp = ((dvs.attack or 0) % 2) * 8
+        + ((dvs.defense or 0) % 2) * 4
+        + ((dvs.speed or 0) % 2) * 2
+        + ((dvs.special or 0) % 2)
+    end
+    return dvs, statExp, hp
+  end
+
+  local function dvGeometry(layout, index)
+    local areaY = layout.mainY + 34
+    local areaH = layout.mainH - 34
+    local columns = layout.mainW >= 144 and 2 or 1
+    local rows = math.ceil(4 / columns)
+    local zero = index - 1
+    local column = zero % columns
+    local row = math.floor(zero / columns)
+    local x = layout.mainX
+      + math.floor(column * layout.mainW / columns)
+    local x2 = layout.mainX
+      + math.floor((column + 1) * layout.mainW / columns)
+    local y = areaY + math.floor(row * areaH / rows)
+    local y2 = areaY + math.floor((row + 1) * areaH / rows)
+    return x, y, x2 - x, y2 - y
+  end
+
+  local function drawDVs(summary, layout)
+    local dvs, statExp, hpDv = dvData(summary.mon)
+    local x, y, w, h = layout.mainX, layout.mainY, layout.mainW, 32
+    drawCard(x, y, w, h, true)
+    local hpText = "HP DV " .. tostring(hpDv or 0)
+    local expText = "EXP " .. tostring(statExp.hp or 0)
+    local joinedWidth = Font.width(hpText) + 8 + Font.width(expText)
+    if joinedWidth <= w - 10 then
+      local startX = x + math.floor((w - joinedWidth) / 2)
+      local labelW = drawText(hpText, startX, y + 12,
+        w - 10, BLACK)
+      drawText(expText, startX + labelW + 8, y + 12,
+        w - 10 - labelW - 8, BLACK)
+    else
+      drawTextCentered(hpText, x + 5, y + 5, w - 10, BLACK)
+      drawTextCentered(expText, x + 5, y + 16, w - 10, BLACK)
+    end
+
+    for i, item in ipairs(DV_ITEMS) do
+      local cx, cy, cw, ch = dvGeometry(layout, i)
+      drawCard(cx, cy, cw, ch, false)
+      local dv = tostring(dvs[item[2]] or 0)
+      local stat = tostring(statExp[item[2]] or 0)
+      local label = item[1]
+      if Font.width(label .. " DV" .. dv) > cw - 8 then label = item[3] end
+      local first = label .. " DV" .. dv
+      local second = "EXP " .. stat
+      local firstY = cy + math.max(2, math.floor((ch - 17) / 2))
+      drawTextCentered(first, cx + 4, firstY, cw - 8, WHITE)
+      drawTextCentered(second, cx + 4, firstY + 9, cw - 8, WHITE)
+    end
+  end
+
   local function drawFooter(summary, layout)
     gray(DARK)
     love.graphics.rectangle("fill", 0, FOOTER_Y, layout.width, 8)
-    local hint = summary.page == 1 and "A/B MOVES" or "A/B BACK"
+    local hint
+    if summary.page == 1 then
+      hint = "A/B MOVES"
+    elseif summary.page == 2 and dvTracker then
+      hint = "A/B DVS"
+    else
+      hint = "A/B BACK"
+    end
     drawText(hint, (layout.width - Font.width(hint)) / 2,
       FOOTER_Y, layout.width - 8, WHITE)
   end
@@ -621,9 +706,11 @@ return function(mod, genderExports)
     if summary.page == 1 then
       drawVitals(summary, layout)
       drawStats(summary, layout)
-    else
+    elseif summary.page == 2 then
       drawExp(summary, layout)
       drawMoves(summary, layout)
+    else
+      drawDVs(summary, layout)
     end
     drawFooter(summary, layout)
     gray(WHITE)
@@ -656,7 +743,7 @@ return function(mod, genderExports)
           w = layout.mainW - 30, h = 6,
         }
       end
-    else
+    elseif summary.page == 2 then
       local exp = PaletteFX.pal(data, "EXP") or base
       zones[#zones + 1] = {
         colors = exp, x = layout.mainX + 5, y = layout.mainY + 28,
@@ -669,6 +756,11 @@ return function(mod, genderExports)
           colors = movePalette(summary, move), x = x, y = y, w = w, h = h,
         }
       end
+    else
+      zones[#zones + 1] = {
+        colors = primary, x = layout.mainX, y = layout.mainY,
+        w = layout.mainW, h = 32,
+      }
     end
     return zones
   end
@@ -688,6 +780,8 @@ return function(mod, genderExports)
       end
       summary.modernPartySummary = true
       summary.modernSummaryLayout = "responsive_cards"
+      summary.modernSummaryPages = dvTracker and 3 or 2
+      summary.dvTrackerCompatible = dvTracker
       return summary
     end,
   }

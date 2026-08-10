@@ -1,9 +1,10 @@
 # Modern Party UI
 
-Modern Party UI rebuilds the POKéMON party screen and both Pokémon summary
-pages with responsive cards while keeping Gen 1's own font, sprites and
-animated menu icons. Party and summary cards use a cohesive primary-type
-palette shared with Typed Move Colors.
+Modern Party UI rebuilds the POKéMON party screen and the built-in Pokémon
+summary pages with responsive cards while keeping Gen 1's own font, sprites
+and animated menu icons. Compatible information mods can add another modern
+summary page. Party and summary cards use a cohesive primary-type palette
+shared with Typed Move Colors.
 
 **Persona: the nostalgic modernizer.** It is for players who want the clearer
 information hierarchy of newer Pokémon games without importing art from a
@@ -38,6 +39,8 @@ Red, Blue, or Yellow ROM imported into
   four clear stat cards
 - the MOVES summary page adds a labelled EXP meter and type-coloured move cards
   with current/max PP
+- when DV Tracker is installed, a third responsive DVS page shows HP and core
+  stat DVs together with their Stat EXP
 - wide summaries arrange moves two-by-two; compact and portrait summaries stack
   them so names, type abbreviations and PP never overlap
 
@@ -113,13 +116,22 @@ presentation and reads each Pokémon's gender, marker and marker colour through
 Gender Mod's public exports. Gender locking, GENDER-OOZE, battle markers,
 nickname handling and PC labels remain owned by Gender Mod.
 
-Other mods that replace an entire `PartyMenu` or `SummaryMenu` still conflict
-unless an explicit composition adapter is available. Menu-icon, sprite and
-data-only Pokémon mods continue to compose through the shared engine helpers.
+DV Tracker 1.0.0 is also composed explicitly. Its native three-page controller
+remains responsible for advancing and closing the summary, while Modern Party
+UI renders its DV and Stat EXP data as responsive cards on page three.
 
-The summary renderer uses the sprite already resolved by Gen1Recomp, including
-`pokemon.sprite` hooks and content-mod sprite paths. Authored true-colour sprites
-are protected from palette recolouring at their live responsive position.
+Modern Party UI loads after the known menu and sprite presentation mods and
+safely replaces an existing `PartyMenu` or `SummaryMenu` record instead of
+failing on a duplicate registration. Menu-icon, sprite and data-only Pokémon
+mods continue to compose through the shared engine helpers. An unknown mod
+whose entire behavior exists only inside its own replacement screen still
+needs a dedicated adapter before that behavior can appear in the modern UI.
+
+The summary renderer uses the live sprite already resolved by Gen1Recomp,
+including `pokemon.sprite` hooks, content-mod sprite paths and the frame swaps
+performed by Crystal Animated Sprites with Shiny Visuals 1.5. Authored
+true-colour sprites are protected from palette recolouring at their live
+responsive position.
 
 ## Develop it
 
@@ -148,11 +160,16 @@ built-in party and summary controllers. It delegates to those controllers and
 overrides only their presentation and responsive surface methods; this keeps the
 behavior surface deliberately small.
 
-Gender Mod 0.3.5 is listed as an optional dependency so it initializes first.
-Modern Party UI then intentionally replaces only its classic party and summary
-records and renders responsive gender markers via its public inter-mod API.
-Another mod that registers either screen id still conflicts unless Modern Party
-UI has a dedicated adapter for it.
+Gender Mod 0.3.5, DV Tracker 1.0.0, Crystal Animated Sprites with Shiny Visuals,
+Unique Menu Icons and Pokémon Gold & Silver Sprites are listed as optional
+dependencies so their controller, art and icon contributions initialize first.
+Modern Party UI then takes presentation ownership while continuing to use their
+live controller methods, exports, sprite frames and icon records.
+
+The reported Gen1Recomp 0.1.75 stack on Windows 10 was also audited. Dramatic
+Shape Voxel, Battle EXP Bar, FireRed/LeafGreen Music, cry replacements and
+Running Shoes do not register the party or summary screens; their battle,
+audio and movement hooks remain outside this mod's presentation surface.
 
 ## Distribution
 
