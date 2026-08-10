@@ -1,0 +1,7 @@
+{
+  "id": "dv_tracker",
+  "name": "DV Tracker Compatibility Fixture",
+  "version": "1.0.0",
+  "api": 2,
+  "entry": "main.lua"
+}

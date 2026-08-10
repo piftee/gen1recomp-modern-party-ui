@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3 - 2026-08-10
+
+- Added a responsive third summary page for DV Tracker 1.0.0, including HP and core-stat DVs plus Stat EXP.
+- Preserved DV Tracker's native three-page A/B controller behavior while replacing only its fixed-width drawing.
+- Raised presentation load priority and declared optional ordering for DV Tracker, Crystal Animated Sprites, Unique Menu Icons and Pokémon Gold & Silver Sprites.
+- Replaced any earlier party or summary screen record safely, preventing duplicate-registration failures that could disable Modern Party UI in larger mod stacks.
+- Added regression coverage for DV Tracker together with Crystal Animated Sprites' high-priority summary constructor and animation update wrappers.
+
 ## 0.3.2 - 2026-08-09
 
 - Removed grey squares behind Gender Mod markers by backing their transparent pixels with the card's final type colour.

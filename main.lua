@@ -116,6 +116,12 @@ return function(mod)
 
   local genderMod = mod.find("gender_mod")
   local genderExports = genderMod and genderMod.exports or nil
+  local compatibility = {
+    dvTracker = mod.find("dv_tracker") ~= nil,
+    crystalSprites = mod.find(
+      "crystal_animated_sprites_with_shiny_visuals") ~= nil,
+    uniqueMenuIcons = mod.find("unique_menu_icons") ~= nil,
+  }
 
   local function loadScreen(filename, label)
     local source, readErr = mod:read(filename)
@@ -138,7 +144,7 @@ return function(mod)
       return nil
     end
 
-    local made, record = pcall(makeScreen, mod, genderExports)
+    local made, record = pcall(makeScreen, mod, genderExports, compatibility)
     if not made or type(record) ~= "table"
         or type(record.new) ~= "function" then
       mod.log:error("%s screen factory failed: %s", label, tostring(record))
@@ -150,32 +156,39 @@ return function(mod)
   local record = loadScreen("screen.lua", "party")
   if not record then return end
 
-  -- Gender Mod 0.3.5 contributes complete classic PartyMenu/SummaryMenu
-  -- records to add its glyphs. Modern Party UI loads after it through the
-  -- optional dependency above, consumes its public gender exports, and
-  -- replaces only those two presentation records. All gender mechanics,
-  -- storage, battle HUD work, naming and PC labels remain Gender Mod-owned.
-  local genderParty = genderExports
-    and mod.content.screens:get("PartyMenu") or nil
-  if genderParty then
-    mod.content.screens:override("PartyMenu", record)
-  else
-    -- PartyMenu is normally a built-in fallback rather than a registry
-    -- record, so registration makes the mod factory win in Screens.resolve.
-    mod.content.screens:register("PartyMenu", record)
+  -- Screen records are presentation ownership, not controller inheritance.
+  -- A compatibility mod may already have registered a classic PartyMenu or
+  -- SummaryMenu before us. Registering again would fail the whole mod during
+  -- load, which is why some larger Windows mod stacks silently fell back to
+  -- the classic UI. Replace any existing record and keep composing behavior
+  -- through the live engine controller and the explicit adapters below.
+  local function installScreen(id, replacement)
+    if mod.content.screens:get(id) then
+      mod.content.screens:override(id, replacement)
+      return true
+    end
+    -- Both ids are normally engine fallbacks rather than registry records.
+    mod.content.screens:register(id, replacement)
+    return false
   end
+
+  local replacedParty = installScreen("PartyMenu", record)
   local summary = loadScreen("summary.lua", "summary")
   if not summary then return end
-  local genderSummary = genderExports
-    and mod.content.screens:get("SummaryMenu") or nil
-  if genderSummary then
-    mod.content.screens:override("SummaryMenu", summary)
-  else
-    mod.content.screens:register("SummaryMenu", summary)
+  local replacedSummary = installScreen("SummaryMenu", summary)
+
+  local adapters = {}
+  if genderExports then adapters[#adapters + 1] = "Gender Mod" end
+  if compatibility.dvTracker then adapters[#adapters + 1] = "DV Tracker" end
+  if compatibility.crystalSprites then
+    adapters[#adapters + 1] = "Crystal Animated Sprites"
   end
-  if genderExports then
-    mod.log:info("modern party roster and summary enabled with Gender Mod")
-  else
-    mod.log:info("modern party roster and summary enabled")
+  if compatibility.uniqueMenuIcons then
+    adapters[#adapters + 1] = "Unique Menu Icons"
   end
+  local suffix = #adapters > 0 and (" with " .. table.concat(adapters, ", "))
+    or ""
+  mod.log:info(
+    "modern party roster and summary enabled%s (replaced records: %s/%s)",
+    suffix, tostring(replacedParty), tostring(replacedSummary))
 end
