@@ -17,6 +17,8 @@ return {
       "A larger black focus frame for the selected Pokémon",
       "Responsive stats, EXP and move cards on Pokémon summaries",
       "A responsive DV and Stat EXP summary page when DV Tracker is installed",
+      "A responsive, colourful Kanto Ribbons collection matching the party-card styling",
+      "A public fallback contract for coexistence with Gen1 Modern UI",
       "Gender Mod 0.3.5 markers on modern party and summary cards",
       "True-colour protection for authored replacement menu icons",
       "Direct access to every setting from the game's main Options menu",
@@ -24,6 +26,7 @@ return {
     known = {
       "Uses the engine_internals permission to retain the complete built-in party controller",
       "Gender Mod 0.3.5 and DV Tracker 1.0.0 compose through dedicated adapters",
+      "Kanto Ribbons 0.18.0 and Gen1 Modern UI 0.8.4 compose through dedicated public bridges",
       "Unknown full-screen replacements still need an adapter for behavior implemented only inside their own screen factory",
     },
   },

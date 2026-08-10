@@ -41,13 +41,17 @@ Red, Blue, or Yellow ROM imported into
   with current/max PP
 - when DV Tracker is installed, a third responsive DVS page shows HP and core
   stat DVs together with their Stat EXP
+- when Kanto Ribbons is installed, the final summary page leads into a fully
+  responsive ribbon collection with colourful medal cards, earned progress,
+  Pokémon icon, names and descriptions
 - wide summaries arrange moves two-by-two; compact and portrait summaries stack
   them so names, type abbreviations and PP never overlap
 
 The mod replaces presentation only. Field moves, battle switching, item targeting,
 TM/HM checks, healing animations, trades, callbacks and cursor persistence are
 still handled by the engine's original `PartyMenu` controller. Summary page
-changes and closing remain handled by the original `SummaryMenu` controller.
+changes remain handled by the composed `SummaryMenu` controller; the final
+Kanto Ribbons handoff is added without replacing its ribbon screen.
 
 ## Settings
 
@@ -120,6 +124,22 @@ DV Tracker 1.0.0 is also composed explicitly. Its native three-page controller
 remains responsible for advancing and closing the summary, while Modern Party
 UI renders its DV and Stat EXP data as responsive cards on page three.
 
+Kanto Ribbons 0.18.0 composes after the final available summary page. Without
+DV Tracker the flow is **STATS → MOVES → RIBBONS**; with it the flow is
+**STATS → MOVES → DVS → RIBBONS**. Kanto Ribbons remains authoritative for
+the catalog, earned state and selected Pokémon, while Modern Party UI presents
+those public exports as the same patterned, chamfered card interface as the
+party and summary screens. Four ribbon cards remain visible at once, scrolling
+one ribbon at a time; wide surfaces use two columns and compact surfaces stack the
+cards. A small controller bridge makes the page order reliable even if another
+mod replaced the update method Kanto Ribbons originally wrapped.
+
+Gen1 Modern UI 0.8.4 is supported through its public `gen1ModernUi` adapter
+contract. It explicitly leaves Modern Party UI's custom party and summary
+renderers visible—including submenus, DV data and the responsive ribbon
+collection—while it continues presenting every other supported menu. Its
+**HIDE ORIGINAL UI** setting can remain enabled.
+
 Modern Party UI loads after the known menu and sprite presentation mods and
 safely replaces an existing `PartyMenu` or `SummaryMenu` record instead of
 failing on a duplicate registration. Menu-icon, sprite and data-only Pokémon
@@ -160,11 +180,12 @@ built-in party and summary controllers. It delegates to those controllers and
 overrides only their presentation and responsive surface methods; this keeps the
 behavior surface deliberately small.
 
-Gender Mod 0.3.5, DV Tracker 1.0.0, Crystal Animated Sprites with Shiny Visuals,
-Unique Menu Icons and Pokémon Gold & Silver Sprites are listed as optional
-dependencies so their controller, art and icon contributions initialize first.
-Modern Party UI then takes presentation ownership while continuing to use their
-live controller methods, exports, sprite frames and icon records.
+Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
+0.8.4, Crystal Animated Sprites with Shiny Visuals, Unique Menu Icons and
+Pokémon Gold & Silver Sprites are listed as optional dependencies so their
+controller, adapter, art and icon contributions initialize first. Modern Party
+UI then takes presentation ownership of only its two screens while continuing
+to use their live controller methods, exports, sprite frames and icon records.
 
 The reported Gen1Recomp 0.1.75 stack on Windows 10 was also audited. Dramatic
 Shape Voxel, Battle EXP Bar, FireRed/LeafGreen Music, cry replacements and

@@ -1,0 +1,9 @@
+{
+  "id": "gen1_modern_ui",
+  "name": "Gen1 Modern UI Compatibility Fixture",
+  "version": "0.8.4",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "overhaul",
+  "priority": 100
+}

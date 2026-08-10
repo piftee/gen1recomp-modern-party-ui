@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.5 - 2026-08-10
+
+- Added a cohesive Kanto Ribbons 0.18.0 collection screen with the same responsive header, patterned backdrop, chamfered cards and Pokémon icon handling as Modern Party UI.
+- Added colourful medal cards, earned/remaining progress, ribbon names and descriptions in two-column wide and stacked compact layouts.
+- Extended the public Gen1 Modern UI adapter contract so the responsive ribbon collection remains visible alongside the party and summary renderers.
+- Added wide, compact, scrolling, controller and colour-zone regression coverage for the restyled collection.
+
+## 0.3.4 - 2026-08-10
+
+- Added a deterministic final-page handoff driven by Kanto Ribbons' public catalog and earned-state exports.
+- Composed Kanto Ribbons after either the standard two summary pages or DV Tracker's third page, with matching footer guidance.
+- Preserved downstream summary and Crystal animation updates while preventing duplicate or premature ribbon-screen transitions.
+- Added a public Gen1 Modern UI 0.8.4 adapter contract that keeps Modern Party UI's party and summary renderers visible while allowing Gen1 Modern UI to own every other supported screen.
+- Added regression coverage for Kanto Ribbons alone and together with DV Tracker, Crystal Animated Sprites, earlier screen replacements and Gen1 Modern UI suppression.
+
 ## 0.3.3 - 2026-08-10
 
 - Added a responsive third summary page for DV Tracker 1.0.0, including HP and core-stat DVs plus Stat EXP.
