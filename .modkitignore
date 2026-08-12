@@ -12,5 +12,9 @@ tests/fixtures/kanto_ribbons/main.lua
 tests/fixtures/kanto_ribbons/manifest.json
 tests/fixtures/gen1_modern_ui/main.lua
 tests/fixtures/gen1_modern_ui/manifest.json
+tests/fixtures/dramatic_shape_shinies/main.lua
+tests/fixtures/dramatic_shape_shinies/manifest.json
+tests/fixtures/crystal_251_split/main.lua
+tests/fixtures/crystal_251_split/manifest.json
 .gitignore
 .github/

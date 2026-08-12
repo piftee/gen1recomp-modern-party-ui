@@ -21,6 +21,26 @@ return function(mod, genderExports, compatibility)
   local kantoRibbons = compatibility and compatibility.kantoRibbons == true
   local summaryPageCount = dvTracker and 3 or 2
 
+  -- DramaticShape 1.8.x exposes its shiny predicate and palette transform
+  -- through mod.exports.lib. Its native SummaryMenu wrapper cannot see this
+  -- screen's instance-owned responsive palette method, so consume that public
+  -- interface directly for the artwork while leaving the surrounding type
+  -- cards under Modern Party UI's palette ownership.
+  local dramaticExports = compatibility
+    and compatibility.dramaticShapeExports or nil
+  local dramaticLib = dramaticExports and dramaticExports.lib or nil
+  local function dramaticModule(name)
+    if not (dramaticLib and type(dramaticLib.require) == "function") then
+      return nil
+    end
+    local ok, value = pcall(dramaticLib.require, name)
+    return ok and type(value) == "table" and value or nil
+  end
+  local dramaticShiny = dramaticModule("Shiny")
+  local dramaticShinyPalette = dramaticModule("ShinyPalette")
+  local crystal251Summary = compatibility
+    and compatibility.crystal251Summary or nil
+
   local TYPE_BASE_COLORS = {
     NORMAL = { 144, 152, 162 }, FIGHTING = { 206, 63, 107 },
     FLYING = { 143, 168, 222 }, POISON = { 171, 106, 200 },
@@ -152,7 +172,7 @@ return function(mod, genderExports, compatibility)
     if background then
       love.graphics.setColor(background[1] / 255, background[2] / 255,
         background[3] / 255, 1)
-      love.graphics.rectangle("fill", x - 1, y - 1, 10, 10)
+      love.graphics.rectangle("fill", x, y, 8, 8)
     end
     local shader = shaderForInk()
     if shader then love.graphics.setShader(shader) end
@@ -160,7 +180,7 @@ return function(mod, genderExports, compatibility)
       color[4] or 1)
     Font.draw(symbol, x, y)
     love.graphics.pop()
-    PaletteFX.markTrueColor(x - 1, y - 1, 10, 10)
+    PaletteFX.markTrueColor(x, y, 8, 8)
     return 9
   end
 
@@ -247,6 +267,52 @@ return function(mod, genderExports, compatibility)
   local function definition(summary)
     local data = summary.game.data
     return data and data.pokemon and data.pokemon[summary.mon.species] or {}
+  end
+
+  local function dramaticShinyTransform(summary)
+    if not (dramaticShiny and type(dramaticShiny.isShiny) == "function"
+        and dramaticShinyPalette) then
+      return nil
+    end
+    local okShiny, shiny = pcall(dramaticShiny.isShiny, summary.mon)
+    if not okShiny or shiny ~= true then return nil end
+
+    local dex = definition(summary).dex
+    if not dex then return nil end
+    if type(dramaticShinyPalette.paletteTransform) == "function" then
+      local ok, transform = pcall(
+        dramaticShinyPalette.paletteTransform, dex)
+      if ok and type(transform) == "function" then return transform end
+    end
+
+    -- Early DramaticShape shiny builds exposed the lower-level pair instead
+    -- of paletteTransform. Supporting it costs nothing and prevents a silent
+    -- normal-colour fallback for players upgrading from those builds.
+    if type(dramaticShinyPalette.forDex) == "function"
+        and type(dramaticShinyPalette.transform) == "function" then
+      local okSpec, spec = pcall(dramaticShinyPalette.forDex, dex)
+      if okSpec then
+        local ok, transform = pcall(dramaticShinyPalette.transform, spec)
+        if ok and type(transform) == "function" then return transform end
+      end
+    end
+    return nil
+  end
+
+  local function transformedArtPalette(summary, colors)
+    local transform = dramaticShinyTransform(summary)
+    if not transform then return colors, false end
+    local out = {}
+    for i, color in ipairs(colors or {}) do
+      if type(color) == "table" and color[1] ~= nil then
+        local ok, r, g, b = pcall(transform,
+          color[1], color[2], color[3])
+        out[i] = ok and { r, g, b } or color
+      else
+        out[i] = color
+      end
+    end
+    return out, true
   end
 
   local function primaryPalette(summary)
@@ -377,9 +443,11 @@ return function(mod, genderExports, compatibility)
 
   local function profileSprite(summary)
     if summary.spriteTrueColor then return summary.sprite, true end
-    local colors = PaletteFX.effectiveColors(
+    local artPalette, shiny = transformedArtPalette(summary,
       PaletteFX.monPal(summary.game.data, summary.mon.species)
         or primaryPalette(summary))
+    summary.modernDramaticShapeShiny = shiny
+    local colors = PaletteFX.effectiveColors(artPalette)
     local key = paletteKey(colors)
     if summary.modernSpriteKey ~= key then
       summary.modernSprite = maskedPaletteSprite(summary.modernSpritePath,
@@ -414,9 +482,10 @@ return function(mod, genderExports, compatibility)
         shader = PaletteFX.keyedShader()
         if shader then
           love.graphics.setShader(shader)
-          PaletteFX.sendColors(shader,
+          local artPalette = transformedArtPalette(summary,
             PaletteFX.monPal(summary.game.data, mon.species)
               or primaryPalette(summary))
+          PaletteFX.sendColors(shader, artPalette)
         end
       end
       love.graphics.setColor(1, 1, 1, 1)
@@ -480,31 +549,104 @@ return function(mod, genderExports, compatibility)
       x + w - 5, y + 29, w - 10, BLACK)
   end
 
-  local STAT_ITEMS = {
+  local COMBINED_STAT_ITEMS = {
     { "ATTACK", "attack", "ATK" }, { "DEFENSE", "defense", "DEF" },
     { "SPEED", "speed", "SPD" }, { "SPECIAL", "special", "SPC" },
   }
 
-  local function statGeometry(layout, index)
+  local SPLIT_STAT_ITEMS = {
+    { "ATTACK", "attack", "ATK" },
+    { "DEFENSE", "defense", "DEF" },
+    { "SP.ATK", "specialAttack", "SP.A" },
+    { "SP.DEF", "specialDefense", "SP.D" },
+    { "SPEED", "speed", "SPD" },
+  }
+
+  local SPLIT_STAT_ITEMS_WIDE = {
+    { "ATTACK", "attack", "ATK" },
+    { "DEFENSE", "defense", "DEF" },
+    { "SPEED", "speed", "SPD" },
+    { "SP.ATK", "specialAttack", "SP.A" },
+    { "SP.DEF", "specialDefense", "SP.D" },
+  }
+
+  local SPLIT_ALIASES = {
+    specialAttack = {
+      "specialAttack", "special_attack", "specialAtk", "spAttack",
+      "spAtk", "spatk", "sp_atk",
+    },
+    specialDefense = {
+      "specialDefense", "special_defense", "specialDef", "spDefense",
+      "spDef", "spdef", "sp_def",
+    },
+  }
+
+  local function firstStat(stats, aliases)
+    for _, key in ipairs(aliases) do
+      local value = stats and tonumber(stats[key])
+      if value ~= nil then return value end
+    end
+    return nil
+  end
+
+  local function displayStats(summary)
+    local stats
+    if crystal251Summary
+        and type(crystal251Summary.statsFor) == "function" then
+      local ok, resolved = pcall(crystal251Summary.statsFor, summary)
+      if ok and type(resolved) == "table" then stats = resolved end
+    end
+    stats = stats or (summary.mon and summary.mon.stats) or {}
+
+    local specialAttack = firstStat(stats, SPLIT_ALIASES.specialAttack)
+    local specialDefense = firstStat(stats, SPLIT_ALIASES.specialDefense)
+    if specialAttack ~= nil and specialDefense ~= nil then
+      return {
+        attack = tonumber(stats.attack) or 0,
+        defense = tonumber(stats.defense) or 0,
+        speed = tonumber(stats.speed) or 0,
+        specialAttack = specialAttack,
+        specialDefense = specialDefense,
+      }, SPLIT_STAT_ITEMS, true
+    end
+    return stats, COMBINED_STAT_ITEMS, false
+  end
+
+  local function statGrid(layout, count)
+    if count <= 4 then return 2, 2 end
+    -- Standard widescreen still has room for readable paired stat cards.
+    -- Only genuinely expansive surfaces switch to three columns; otherwise
+    -- the Special pair stays together and SPEED is centred beneath it.
+    if layout.mainW >= 240 then return 3, 2 end
+    return 2, 3
+  end
+
+  local function statGeometry(layout, index, count)
     local areaY = layout.mainY + 44
     local areaH = layout.mainH - 44
-    local column = (index - 1) % 2
-    local row = math.floor((index - 1) / 2)
-    local x = layout.mainX
-      + math.floor(column * layout.mainW / 2)
-    local x2 = layout.mainX
-      + math.floor((column + 1) * layout.mainW / 2)
-    local y = areaY + math.floor(row * areaH / 2)
-    local y2 = areaY + math.floor((row + 1) * areaH / 2)
+    local columns, rows = statGrid(layout, count)
+    local row = math.floor((index - 1) / columns)
+    local column = (index - 1) % columns
+    local rowCount = math.min(columns, count - row * columns)
+    local rowWidth = math.floor(layout.mainW * rowCount / columns)
+    local rowX = layout.mainX
+      + math.floor((layout.mainW - rowWidth) / 2)
+    local x = rowX + math.floor(column * rowWidth / rowCount)
+    local x2 = rowX + math.floor((column + 1) * rowWidth / rowCount)
+    local y = areaY + math.floor(row * areaH / rows)
+    local y2 = areaY + math.floor((row + 1) * areaH / rows)
     return x, y, x2 - x, y2 - y
   end
 
   local function drawStats(summary, layout)
-    for i, item in ipairs(STAT_ITEMS) do
-      local x, y, w, h = statGeometry(layout, i)
+    local stats, items, split = displayStats(summary)
+    local columns = select(1, statGrid(layout, #items))
+    if split and columns >= 3 then items = SPLIT_STAT_ITEMS_WIDE end
+    summary.modernSplitSpecial = split
+    for i, item in ipairs(items) do
+      local x, y, w, h = statGeometry(layout, i, #items)
       drawCard(x, y, w, h, false)
-      local value = summary.mon.stats and summary.mon.stats[item[2]] or 0
-      local valueText = tostring(value)
+      local valueText = tostring(math.floor(tonumber(stats[item[2]]) or 0))
       local label = item[1]
       local gap = 4
       local groupWidth = Font.width(label) + gap + Font.width(valueText)
@@ -620,40 +762,104 @@ return function(mod, genderExports, compatibility)
     { "SPEED", "speed", "SPD" }, { "SPECIAL", "special", "SPC" },
   }
 
-  local function dvData(mon)
+  local SPLIT_DV_ITEMS = {
+    { "ATTACK", "attack", "ATK" },
+    { "DEFENSE", "defense", "DEF" },
+    { "SP.ATK", "specialAttack", "SP.A" },
+    { "SP.DEF", "specialDefense", "SP.D" },
+    { "SPEED", "speed", "SPD" },
+  }
+
+  local SPLIT_DV_ITEMS_WIDE = {
+    { "ATTACK", "attack", "ATK" },
+    { "DEFENSE", "defense", "DEF" },
+    { "SPEED", "speed", "SPD" },
+    { "SP.ATK", "specialAttack", "SP.A" },
+    { "SP.DEF", "specialDefense", "SP.D" },
+  }
+
+  local function dvData(summary)
+    local mon = summary and summary.mon
     local stats = mon and mon.stats or {}
     local dvs = (mon and (mon.dvs or mon.ivs))
       or stats.dvs or stats.ivs or {}
     local statExp = mon and mon.statExp or {}
+    local specialAttack = firstStat(dvs, SPLIT_ALIASES.specialAttack)
+    local specialDefense = firstStat(dvs, SPLIT_ALIASES.specialDefense)
+    local _, _, splitStats = displayStats(summary)
+    local split = splitStats
+      or (specialAttack ~= nil and specialDefense ~= nil)
+    if split then
+      local sharedDV = tonumber(dvs.special)
+      specialAttack = specialAttack or sharedDV or 0
+      specialDefense = specialDefense or sharedDV or 0
+      dvs = {
+        hp = dvs.hp,
+        attack = tonumber(dvs.attack) or 0,
+        defense = tonumber(dvs.defense) or 0,
+        speed = tonumber(dvs.speed) or 0,
+        special = sharedDV,
+        specialAttack = specialAttack,
+        specialDefense = specialDefense,
+      }
+      statExp = {
+        hp = statExp.hp,
+        attack = statExp.attack,
+        defense = statExp.defense,
+        speed = statExp.speed,
+        special = statExp.special,
+        specialAttack = firstStat(statExp, SPLIT_ALIASES.specialAttack)
+          or statExp.special or 0,
+        specialDefense = firstStat(statExp, SPLIT_ALIASES.specialDefense)
+          or statExp.special or 0,
+      }
+    end
     local hp = dvs.hp
     if hp == nil then
       hp = ((dvs.attack or 0) % 2) * 8
         + ((dvs.defense or 0) % 2) * 4
         + ((dvs.speed or 0) % 2) * 2
-        + ((dvs.special or 0) % 2)
+        + ((dvs.special or specialAttack or specialDefense or 0) % 2)
     end
-    return dvs, statExp, hp
+    return dvs, statExp, hp, split
   end
 
-  local function dvGeometry(layout, index)
+  local function dvGrid(layout, count)
+    if count <= 4 then
+      local columns = layout.mainW >= 144 and 2 or 1
+      return columns, math.ceil(count / columns)
+    end
+    if layout.mainW >= 240 then return 3, 2 end
+    if layout.mainW >= 120 then return 2, 3 end
+    return 1, count
+  end
+
+  local function dvGeometry(layout, index, count)
     local areaY = layout.mainY + 34
     local areaH = layout.mainH - 34
-    local columns = layout.mainW >= 144 and 2 or 1
-    local rows = math.ceil(4 / columns)
+    local columns, rows = dvGrid(layout, count)
     local zero = index - 1
     local column = zero % columns
     local row = math.floor(zero / columns)
-    local x = layout.mainX
-      + math.floor(column * layout.mainW / columns)
-    local x2 = layout.mainX
-      + math.floor((column + 1) * layout.mainW / columns)
+    local rowCount = math.min(columns, count - row * columns)
+    local rowWidth = math.floor(layout.mainW * rowCount / columns)
+    local rowX = layout.mainX
+      + math.floor((layout.mainW - rowWidth) / 2)
+    local x = rowX + math.floor(column * rowWidth / rowCount)
+    local x2 = rowX + math.floor((column + 1) * rowWidth / rowCount)
     local y = areaY + math.floor(row * areaH / rows)
     local y2 = areaY + math.floor((row + 1) * areaH / rows)
     return x, y, x2 - x, y2 - y
   end
 
+  local function compactStatExp(value)
+    value = math.max(0, math.floor(tonumber(value) or 0))
+    if value >= 1000 then return tostring(math.floor(value / 1000)) .. "K" end
+    return tostring(value)
+  end
+
   local function drawDVs(summary, layout)
-    local dvs, statExp, hpDv = dvData(summary.mon)
+    local dvs, statExp, hpDv, split = dvData(summary)
     local x, y, w, h = layout.mainX, layout.mainY, layout.mainW, 32
     drawCard(x, y, w, h, true)
     local hpText = "HP DV " .. tostring(hpDv or 0)
@@ -670,18 +876,28 @@ return function(mod, genderExports, compatibility)
       drawTextCentered(expText, x + 5, y + 16, w - 10, BLACK)
     end
 
-    for i, item in ipairs(DV_ITEMS) do
-      local cx, cy, cw, ch = dvGeometry(layout, i)
+    local items = split and SPLIT_DV_ITEMS or DV_ITEMS
+    local columns = select(1, dvGrid(layout, #items))
+    if split and columns >= 3 then items = SPLIT_DV_ITEMS_WIDE end
+    summary.modernSplitSpecialDVs = split
+    for i, item in ipairs(items) do
+      local cx, cy, cw, ch = dvGeometry(layout, i, #items)
       drawCard(cx, cy, cw, ch, false)
       local dv = tostring(dvs[item[2]] or 0)
       local stat = tostring(statExp[item[2]] or 0)
       local label = item[1]
-      if Font.width(label .. " DV" .. dv) > cw - 8 then label = item[3] end
-      local first = label .. " DV" .. dv
-      local second = "EXP " .. stat
-      local firstY = cy + math.max(2, math.floor((ch - 17) / 2))
-      drawTextCentered(first, cx + 4, firstY, cw - 8, WHITE)
-      drawTextCentered(second, cx + 4, firstY + 9, cw - 8, WHITE)
+      if columns == 1 and split then
+        local joined = item[3] .. dv .. "/" .. compactStatExp(stat)
+        drawTextCentered(joined, cx + 4,
+          cy + math.floor((ch - 8) / 2), cw - 8, WHITE)
+      else
+        if Font.width(label .. " DV" .. dv) > cw - 8 then label = item[3] end
+        local first = label .. " DV" .. dv
+        local second = "EXP " .. stat
+        local firstY = cy + math.max(2, math.floor((ch - 17) / 2))
+        drawTextCentered(first, cx + 4, firstY, cw - 8, WHITE)
+        drawTextCentered(second, cx + 4, firstY + 9, cw - 8, WHITE)
+      end
     end
   end
 
@@ -791,6 +1007,9 @@ return function(mod, genderExports, compatibility)
         summaryPageCount)
       summary.dvTrackerCompatible = dvTracker
       summary.kantoRibbonsCompatible = kantoRibbons
+      summary.dramaticShapeShinyCompatible = dramaticShiny ~= nil
+        and dramaticShinyPalette ~= nil
+      summary.splitSpecialCompatible = crystal251Summary ~= nil
       return summary
     end,
   }

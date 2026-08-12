@@ -36,7 +36,8 @@ Red, Blue, or Yellow ROM imported into
 - the UI expands horizontally to use the full available integer-scaled surface;
   wide displays get broader cards rather than a centered 160px strip
 - the STATS summary page uses a responsive profile rail, HP/status card and
-  four clear stat cards
+  four clear stat cards—or five when a compatible mod splits Special Attack
+  and Special Defense
 - the MOVES summary page adds a labelled EXP meter and type-coloured move cards
   with current/max PP
 - when DV Tracker is installed, a third responsive DVS page shows HP and core
@@ -153,6 +154,25 @@ performed by Crystal Animated Sprites with Shiny Visuals 1.5. Authored
 true-colour sprites are protected from palette recolouring at their live
 responsive position.
 
+DramaticShape 1.8.2 shinies are supported through that mod's public
+`exports.lib` interface. Modern Party UI asks DramaticShape whether the
+selected Pokémon is shiny and applies its species-specific shiny transform to
+the profile artwork only. The responsive card, type colour and surrounding
+text keep their Modern Party UI palette, and ordinary Pokémon are unchanged.
+
+Crystal 251 0.10.3's Special split is supported through its public
+`exports.crystalSummary.statsFor` interface. Its recalculated Special Attack
+and Special Defense values appear as separate modern stat cards, with the
+fifth card reflowing for compact, square and wide screens. When DV Tracker is
+also installed, its DV page likewise shows separate Special Attack and Special
+Defense cards. Crystal correctly supplies the same underlying Special DV to
+both derived stats, while distinct Special Stat EXP values are shown when
+available. Other overhaul mods
+receive the same presentation when they expose both conventional split-stat
+fields (`specialAttack`/`specialDefense`, `spAtk`/`spDef`, and common naming
+variants). If both values are not available, the normal combined Gen I Special
+card remains unchanged.
+
 ## Develop it
 
 Clone this repository into the `mods` directory of a Gen1Recomp checkout:
@@ -181,11 +201,12 @@ overrides only their presentation and responsive surface methods; this keeps the
 behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
-0.8.4, Crystal Animated Sprites with Shiny Visuals, Unique Menu Icons and
-Pokémon Gold & Silver Sprites are listed as optional dependencies so their
-controller, adapter, art and icon contributions initialize first. Modern Party
-UI then takes presentation ownership of only its two screens while continuing
-to use their live controller methods, exports, sprite frames and icon records.
+0.8.4, Crystal 251 0.10.3, DramaticShape, Crystal Animated Sprites with Shiny
+Visuals, Unique Menu Icons and Pokémon Gold & Silver Sprites are listed as
+optional dependencies so their controller, adapter, stat, art and icon
+contributions initialize first. Modern Party UI then takes presentation
+ownership of only its two screens while continuing to use their live controller
+methods, exports, sprite frames and icon records.
 
 The reported Gen1Recomp 0.1.75 stack on Windows 10 was also audited. Dramatic
 Shape Voxel, Battle EXP Bar, FireRed/LeafGreen Music, cry replacements and

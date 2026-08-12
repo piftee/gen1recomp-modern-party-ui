@@ -542,6 +542,214 @@ T.check(stack:top() ~= forced, "forced battle selection closes the picker")
 run.release()
 PaletteFX.setMode(previousMode)
 
+-- DramaticShape 1.8.2 owns the shiny decision and species-specific colour
+-- transform, but installs them through a class-level SummaryMenu palette wrap.
+-- Modern Party UI owns an instance palette method, so it must consume the
+-- mod's exported modules directly and apply the transform only to the art.
+local dramaticData = T.fixtures.fresh()
+dramaticData.icons = data.icons
+dramaticData.palettes = data.palettes
+Font.load(dramaticData)
+PaletteFX.setMode("gbc")
+local dramaticRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/dramatic_shape_shinies",
+  "mods/modern_party_ui",
+}, { data = dramaticData, dev = true })
+T.eq(#dramaticRun.errors, 0,
+  "loads beside DramaticShape shiny sprites")
+
+local shinyMon = mon("FIXMON_A", "SPARKLE", 12, 45, 45)
+shinyMon.stats = {
+  hp = 45, attack = 24, defense = 20, speed = 18, special = 22,
+}
+shinyMon.shiny = true
+local dramaticGame = {
+  data = dramaticRun.data,
+  save = {
+    party = { shinyMon }, inventory = {}, options = {},
+    player = { name = "RED", id = 13839 },
+  },
+  stack = stack,
+  input = input,
+  renderer = { uiSize = function() return 256, 144 end },
+}
+local shinySummary = dramaticRun.data.screens.SummaryMenu.new(
+  dramaticGame, shinyMon)
+T.check(shinySummary.dramaticShapeShinyCompatible == true,
+  "the modern summary detects DramaticShape's public shiny modules")
+local normalProfile = shinySummary:sgbPalettes(dramaticGame)[2].colors
+local shinyCalls = dramaticRun.loader.exports.DRAMATIC_SHAPE.fixtureCalls
+local shinyDrawOK, shinyDrawErr = pcall(shinySummary.draw, shinySummary)
+T.check(shinyDrawOK,
+  "DramaticShape shiny artwork draws in the modern stats screen: "
+    .. tostring(shinyDrawErr))
+T.check(shinySummary.modernDramaticShapeShiny == true,
+  "the summary records that its artwork uses the shiny palette")
+T.check(shinyCalls.paletteRequests > 0 and shinyCalls.colorTransforms >= 4,
+  "the artwork consumes DramaticShape's species-specific palette transform")
+T.check(shinySummary:sgbPalettes(dramaticGame)[2].colors == normalProfile,
+  "DramaticShape changes the Pokemon artwork without recolouring its card")
+
+local commonMon = mon("FIXMON_A", "COMMON", 12, 45, 45)
+commonMon.stats = shinyMon.stats
+local commonSummary = dramaticRun.data.screens.SummaryMenu.new(
+  dramaticGame, commonMon)
+local transformCount = shinyCalls.colorTransforms
+local commonDrawOK, commonDrawErr = pcall(commonSummary.draw, commonSummary)
+T.check(commonDrawOK,
+  "ordinary artwork still draws beside DramaticShape: "
+    .. tostring(commonDrawErr))
+T.check(commonSummary.modernDramaticShapeShiny ~= true
+    and shinyCalls.colorTransforms == transformCount,
+  "ordinary Pokemon keep their normal summary colours")
+dramaticRun.release()
+PaletteFX.setMode(previousMode)
+
+-- Crystal 251 0.10.3 exposes recalculated split stats through
+-- exports.crystalSummary.statsFor. Use that public interface while replacing
+-- its fixed classic overlay with five responsive Modern Party UI cards.
+local splitData = T.fixtures.fresh()
+splitData.icons = data.icons
+splitData.palettes = data.palettes
+Font.load(splitData)
+PaletteFX.setMode("gbc")
+local splitRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/crystal_251_split",
+  "mods/modern_party_ui/tests/fixtures/dv_tracker",
+  "mods/modern_party_ui",
+}, { data = splitData, dev = true })
+T.eq(#splitRun.errors, 0,
+  "loads beside Crystal 251 split stats and DV Tracker")
+
+local splitMon = mon("FIXMON_A", "DUAL", 30, 88, 88)
+splitMon.stats = {
+  hp = 88, attack = 71, defense = 66, speed = 92, special = 101,
+}
+splitMon.crystal251Stats = {
+  hp = 88, attack = 71, defense = 66, speed = 92,
+  specialAttack = 137, specialDefense = 84,
+}
+splitMon.dvs = { attack = 7, defense = 8, speed = 9, special = 12 }
+splitMon.statExp = {
+  hp = 1111, attack = 2222, defense = 3333, speed = 6666,
+  special = 4000, specialAttack = 4444, specialDefense = 5555,
+}
+local splitGame = {
+  data = splitRun.data,
+  save = {
+    party = { splitMon }, inventory = {}, options = {},
+    player = { name = "RED", id = 13839 },
+  },
+  stack = stack,
+  input = input,
+  renderer = { uiSize = function() return 256, 144 end },
+}
+local splitSummary = splitRun.data.screens.SummaryMenu.new(
+  splitGame, splitMon)
+T.check(splitSummary.splitSpecialCompatible == true,
+  "the modern summary detects Crystal 251's public split-stat helper")
+
+local splitText = {}
+Font.draw = function(text, x, y)
+  splitText[#splitText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local splitOK, splitErr = pcall(splitSummary.draw, splitSummary)
+Font.draw = realFontDraw
+T.check(splitOK,
+  "Crystal 251 split stats draw responsively: " .. tostring(splitErr))
+T.check(splitSummary.modernSplitSpecial == true,
+  "a split-stat Pokémon selects the five-card presentation")
+T.check(not splitSummary.crystal251ClassicSplitDrawn,
+  "Crystal 251's classic overlay does not cover the modern cards")
+T.check(splitRun.loader.exports.CRYSTAL_251.fixtureCalls.statsFor > 0,
+  "the stats screen consumes Crystal 251's recalculated public values")
+
+local splitCalls = {}
+for _, call in ipairs(splitText) do splitCalls[call.text] = call end
+T.check(splitCalls["SP.ATK"] and splitCalls["137"],
+  "Special Attack is displayed independently with Crystal's live value")
+T.check(splitCalls["SP.DEF"] and splitCalls["84"],
+  "Special Defense is displayed independently with Crystal's live value")
+T.check(not splitCalls["SPECIAL"] and not splitCalls["101"],
+  "the obsolete combined Special value is omitted when a split is present")
+T.check(splitCalls["SP.ATK"].y == splitCalls["SP.DEF"].y
+    and splitCalls["SPEED"].y > splitCalls["SP.DEF"].y,
+  "standard widescreen pairs the Special cards and centres Speed below")
+
+splitGame.renderer = { uiSize = function() return 208, 144 end }
+local squareSplitOK, squareSplitErr = pcall(
+  splitSummary.draw, splitSummary)
+T.check(squareSplitOK,
+  "five stats reflow on a square surface: " .. tostring(squareSplitErr))
+splitGame.renderer = { uiSize = function() return 160, 144 end }
+local compactSplitOK, compactSplitErr = pcall(
+  splitSummary.draw, splitSummary)
+T.check(compactSplitOK,
+  "five stats remain functional at 160x144: " .. tostring(compactSplitErr))
+
+splitGame.renderer = { uiSize = function() return 640, 144 end }
+local ultraText = {}
+Font.draw = function(text, x, y)
+  ultraText[#ultraText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local ultraSplitOK, ultraSplitErr = pcall(splitSummary.draw, splitSummary)
+Font.draw = realFontDraw
+T.check(ultraSplitOK,
+  "five stats use the expanded ultrawide surface: "
+    .. tostring(ultraSplitErr))
+local ultraCalls = {}
+for _, call in ipairs(ultraText) do ultraCalls[call.text] = call end
+T.check(ultraCalls["SP.ATK"] and ultraCalls["SP.DEF"]
+    and ultraCalls["SP.ATK"].y == ultraCalls["SP.DEF"].y,
+  "ultrawide layouts keep Special Attack and Special Defense paired")
+
+splitGame.renderer = { uiSize = function() return 256, 144 end }
+splitSummary.page = 3
+local splitDvText = {}
+Font.draw = function(text, x, y)
+  splitDvText[#splitDvText + 1] = { text = text, x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local splitDvOK, splitDvErr = pcall(splitSummary.draw, splitSummary)
+Font.draw = realFontDraw
+T.check(splitDvOK,
+  "Crystal's five-DV page draws responsively: " .. tostring(splitDvErr))
+T.check(splitSummary.modernSplitSpecialDVs == true,
+  "Crystal's Special split activates separate DV cards")
+local splitDvCalls = {}
+for _, call in ipairs(splitDvText) do splitDvCalls[call.text] = call end
+T.check(splitDvCalls["SP.A DV12"] and splitDvCalls["SP.D DV12"],
+  "Special Attack and Special Defense reuse Crystal's shared Special DV")
+T.check(splitDvCalls["EXP 4444"] and splitDvCalls["EXP 5555"],
+  "split DV cards retain distinct Special Stat EXP when provided")
+
+splitGame.renderer = { uiSize = function() return 160, 144 end }
+local compactSplitDvOK, compactSplitDvErr = pcall(
+  splitSummary.draw, splitSummary)
+T.check(compactSplitDvOK,
+  "five DV cards remain functional at 160x144: "
+    .. tostring(compactSplitDvErr))
+splitSummary.page = 1
+
+-- Other split-stat mods can expose the conventional aliases directly on the
+-- Pokémon without pretending to be Crystal 251.
+local aliasMon = mon("FIXMON_A", "ALIASES", 25, 70, 70)
+aliasMon.stats = {
+  hp = 70, attack = 55, defense = 61, speed = 73,
+  special = 80, spAtk = 99, spDef = 77,
+}
+local aliasSummary = splitRun.data.screens.SummaryMenu.new(
+  splitGame, aliasMon)
+local aliasOK, aliasErr = pcall(aliasSummary.draw, aliasSummary)
+T.check(aliasOK and aliasSummary.modernSplitSpecial == true,
+  "common spAtk/spDef fields activate the generic split-stat fallback: "
+    .. tostring(aliasErr))
+
+splitRun.release()
+PaletteFX.setMode(previousMode)
+
 -- Gender Mod 0.3.5 registers complete classic PartyMenu and SummaryMenu
 -- records. Modern Party UI must intentionally replace those two records,
 -- keep its responsive controllers, and consume Gender Mod's public exports
@@ -577,7 +785,7 @@ Font.draw = function(text, x, y)
   return realFontDraw(text, x, y)
 end
 graphics.rectangle = function(mode, x, y, w, h)
-  if mode == "fill" and w == 10 and h == 10 then
+  if mode == "fill" and w == 8 and h == 8 then
     local r, g, b = graphics.getColor()
     genderBackings[#genderBackings + 1] = { r = r, g = g, b = b }
   end
@@ -607,13 +815,13 @@ T.check(strippedPartyName ~= nil,
   "the gender glyph replaces the nickname's baked-in symbol")
 T.check(genderBackings[1] and genderBackings[1].g > genderBackings[1].r
     and genderBackings[1].g > genderBackings[1].b,
-  "the gender marker backing matches the final Grass card instead of grey")
-local guardedGenderMark
+  "the gender marker's exact glyph cell matches the final Grass card")
+local fittedGenderMark
 for _, rect in ipairs(genderMarks) do
-  if rect.w == 10 and rect.h == 10 then guardedGenderMark = rect break end
+  if rect.w == 8 and rect.h == 8 then fittedGenderMark = rect break end
 end
-T.check(guardedGenderMark ~= nil,
-  "gender true-colour protection includes a one-pixel seam guard")
+T.check(fittedGenderMark ~= nil,
+  "gender true-colour protection has no expanded square frame")
 
 local genderSummary = genderSummaryRecord.new(genderGame, genderMon)
 T.check(genderSummary.modernPartySummary == true,
