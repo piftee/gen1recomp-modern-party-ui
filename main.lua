@@ -118,6 +118,8 @@ return function(mod)
   local genderExports = genderMod and genderMod.exports or nil
   local gen1ModernUi = mod.find("gen1_modern_ui")
   local kantoRibbons = mod.find("kanto_ribbons")
+  local dramaticShape = mod.find("DRAMATIC_SHAPE")
+  local crystal251 = mod.find("CRYSTAL_251")
   local compatibility = {
     dvTracker = mod.find("dv_tracker") ~= nil,
     kantoRibbons = kantoRibbons ~= nil,
@@ -125,6 +127,11 @@ return function(mod)
     gen1ModernUi = gen1ModernUi ~= nil,
     crystalSprites = mod.find(
       "crystal_animated_sprites_with_shiny_visuals") ~= nil,
+    dramaticShape = dramaticShape ~= nil,
+    dramaticShapeExports = dramaticShape and dramaticShape.exports or nil,
+    crystal251 = crystal251 ~= nil,
+    crystal251Summary = crystal251 and crystal251.exports
+      and crystal251.exports.crystalSummary or nil,
     uniqueMenuIcons = mod.find("unique_menu_icons") ~= nil,
   }
 
@@ -325,6 +332,12 @@ return function(mod)
   end
   if compatibility.crystalSprites then
     adapters[#adapters + 1] = "Crystal Animated Sprites"
+  end
+  if compatibility.dramaticShape then
+    adapters[#adapters + 1] = "DramaticShape Shinies"
+  end
+  if compatibility.crystal251 then
+    adapters[#adapters + 1] = "Crystal 251 Split Stats"
   end
   if compatibility.uniqueMenuIcons then
     adapters[#adapters + 1] = "Unique Menu Icons"

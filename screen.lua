@@ -211,14 +211,13 @@ return function(mod, genderExports)
 
     x, y = math.floor(x), math.floor(y)
     love.graphics.push("all")
-    -- True-colour regions are re-blitted without the card palette. Give the
-    -- glyph a final-colour backing (plus a one-pixel guard) so transparent
-    -- pixels and outward-rounded scissor edges cannot expose the raw grey
-    -- card underneath.
+    -- True-colour regions are re-blitted without the card palette. Back only
+    -- the glyph's native 8x8 cell: the former one-pixel safety frame read as
+    -- a small recessed square on otherwise-flat party cards.
     if background then
       love.graphics.setColor(background[1] / 255, background[2] / 255,
         background[3] / 255, 1)
-      love.graphics.rectangle("fill", x - 1, y - 1, 10, 10)
+      love.graphics.rectangle("fill", x, y, 8, 8)
     end
     local shader = shaderForInk()
     if shader then love.graphics.setShader(shader) end
@@ -227,7 +226,7 @@ return function(mod, genderExports)
     Font.draw(symbol, x, y)
     love.graphics.pop()
     trueColorRegions[#trueColorRegions + 1] = {
-      x = x - 1, y = y - 1, w = 10, h = 10,
+      x = x, y = y, w = 8, h = 8,
     }
     return 9
   end

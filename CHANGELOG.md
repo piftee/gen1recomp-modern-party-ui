@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.8 - 2026-08-12
+
+- Split the DV page into separate Special Attack and Special Defense cards whenever a compatible Special-split overhaul is active.
+- Correctly reuse Crystal's single underlying Special DV for both cards while allowing distinct Special Attack and Special Defense Stat EXP values.
+- Made the five-DV layout responsive from compact 160×144 through ultrawide surfaces.
+- Removed the expanded safety frame behind Gender Mod markers so their protected colour occupies only the native 8×8 glyph cell.
+
+## 0.3.7 - 2026-08-12
+
+- Added split-Special compatibility for Crystal 251 0.10.3 through its public `crystalSummary.statsFor` interface.
+- Replaced the combined Special card with separate Special Attack and Special Defense cards only when both live values are available.
+- Added a generic fallback for overhaul mods that publish conventional split-stat fields such as `specialAttack`/`specialDefense` or `spAtk`/`spDef`.
+- Made the five-stat layout responsive across compact 160×144, square, widescreen and ultrawide surfaces while leaving ordinary Gen I summaries unchanged.
+- Added regression coverage for Crystal's recalculated values, classic-overlay suppression and generic split-stat aliases.
+
+## 0.3.6 - 2026-08-10
+
+- Added direct compatibility with DramaticShape 1.8.2's public shiny predicate and species-palette transform.
+- Restored shiny colours to Pokémon profile artwork on the responsive stats screen without recolouring its card or surrounding UI.
+- Kept ordinary Pokémon, authored true-colour sprites and Crystal Animated Sprites behavior unchanged.
+- Added focused regression coverage for shiny and non-shiny summaries beside DramaticShape.
+
 ## 0.3.5 - 2026-08-10
 
 - Added a cohesive Kanto Ribbons 0.18.0 collection screen with the same responsive header, patterned backdrop, chamfered cards and Pokémon icon handling as Modern Party UI.
