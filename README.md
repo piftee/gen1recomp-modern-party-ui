@@ -108,7 +108,10 @@ and Unique Colors modes. Its ORIGINAL icon set remains palette-aware, as that
 mod intends. Transparent pixels are backed with the card's final display
 colour, so true-colour protection does not introduce a gray icon square. The
 same protection is clipped beneath the action menu, keeping popup text and
-backgrounds intact when they overlap a colour icon.
+backgrounds intact when they overlap a colour icon. Third-party colour claims
+made inside the shared icon renderer follow the same popup-aware path. This
+keeps the taller FOLLOW and utility menus supplied by **Wilds of Kanto 2.1.7**
+free of unshaded grey blocks.
 
 The **Species** card-colour option continues to use the engine's live Pokémon
 palette lookup. The default **Type** option changes only the card surface; icon
@@ -202,11 +205,11 @@ behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
 0.8.4, Crystal 251 0.10.3, DramaticShape, Crystal Animated Sprites with Shiny
-Visuals, Unique Menu Icons and Pokémon Gold & Silver Sprites are listed as
-optional dependencies so their controller, adapter, stat, art and icon
-contributions initialize first. Modern Party UI then takes presentation
-ownership of only its two screens while continuing to use their live controller
-methods, exports, sprite frames and icon records.
+Visuals, Unique Menu Icons, Wilds of Kanto and Pokémon Gold & Silver Sprites
+are listed as optional dependencies so their controller, adapter, stat, art,
+submenu and icon contributions initialize first. Modern Party UI then takes
+presentation ownership of only its two screens while continuing to use their
+live controller methods, exports, sprite frames and icon records.
 
 The reported Gen1Recomp 0.1.75 stack on Windows 10 was also audited. Dramatic
 Shape Voxel, Battle EXP Bar, FireRed/LeafGreen Music, cry replacements and

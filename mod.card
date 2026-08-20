@@ -23,6 +23,7 @@ return {
       "DramaticShape shiny colours on modern summary artwork",
       "Responsive Special Attack, Special Defense and split-DV cards for compatible overhaul mods",
       "True-colour protection for authored replacement menu icons",
+      "Popup-safe full-colour icons and FOLLOW actions from Wilds of Kanto",
       "Direct access to every setting from the game's main Options menu",
     },
     known = {
@@ -31,6 +32,7 @@ return {
       "Kanto Ribbons 0.18.0 and Gen1 Modern UI 0.8.4 compose through dedicated public bridges",
       "DramaticShape 1.8.2 shiny palettes compose through its public module exports",
       "Crystal 251 0.10.3 split stats compose through its public summary export",
+      "Wilds of Kanto 2.1.7 icon and submenu hooks compose through the shared party renderer",
       "Unknown full-screen replacements still need an adapter for behavior implemented only inside their own screen factory",
     },
   },
