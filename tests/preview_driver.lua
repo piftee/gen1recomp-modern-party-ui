@@ -95,10 +95,20 @@ return function(game)
   -- behavior test separately drives the original controller's input path.
   menu.submenu = true
   menu.subIndex = 1
-  menu.subItems = {
-    { label = "STATS", action = "stats" },
-    { label = "SWITCH", action = "switch" },
-  }
+  if os.getenv("PREVIEW_TALL_ACTIONS") == "1" then
+    menu.subItems = {
+      { label = "STATS", action = "stats" },
+      { label = "SWITCH", action = "switch" },
+      { label = "RELEARN", action = "relearn" },
+      { label = "RENAME", action = "rename" },
+      { label = "FOLLOW", action = "follow" },
+    }
+  else
+    menu.subItems = {
+      { label = "STATS", action = "stats" },
+      { label = "SWITCH", action = "switch" },
+    }
+  end
   U.wait(8)
   U.log("PASS action menu prepared")
   U.shot(game, DIR .. "/modern_party_ui_actions.png")

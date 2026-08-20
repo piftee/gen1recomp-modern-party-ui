@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.9 - 2026-08-20
+
+- Fixed two-digit party levels being clipped to `LV1` when a gender marker occupied the compact level row.
+- Added compatibility with Wilds of Kanto 2.1.7 and other icon renderers that publish their own true-colour regions.
+- Routed third-party icon colour protection around the action popup's live dimensions, preventing tall FOLLOW, field-move and utility menus from developing grey blocks.
+- Added automated and visual-preview coverage for five-row companion action menus.
+
 ## 0.3.8 - 2026-08-12
 
 - Split the DV page into separate Special Attack and Special Defense cards whenever a compatible Special-split overhaul is active.

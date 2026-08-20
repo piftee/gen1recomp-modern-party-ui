@@ -519,6 +519,32 @@ return function(mod, genderExports)
     love.graphics.rectangle("line", x + 5, y + (height - 14) / 2, 13, 13)
   end
 
+  -- Some companion mods replace PartyMenu.drawIcon and claim their own
+  -- true-colour rectangle from inside that shared renderer. Collect those
+  -- claims instead of publishing them immediately: the party action popup
+  -- is drawn afterward, and a raw full-colour re-blit over a tall popup would
+  -- turn the overlapping menu pixels back into unshaded grey blocks. All
+  -- icon claims are published together after the popup's real bounds are
+  -- known, through markTrueColorOutside below.
+  local function drawIconCollectingTrueColor(menu, mon, x, y, selected,
+      counter, regions)
+    local originalMark = PaletteFX.markTrueColor
+    PaletteFX.markTrueColor = function(rx, ry, rw, rh)
+      rx, ry, rw, rh = tonumber(rx), tonumber(ry), tonumber(rw), tonumber(rh)
+      if rx and ry and rw and rh and rw > 0 and rh > 0 then
+        regions[#regions + 1] = { x = rx, y = ry, w = rw, h = rh }
+      end
+    end
+
+    local result
+    local ok, err = xpcall(function()
+      result = PartyMenu.drawIcon(menu.game, mon, x, y, selected, counter)
+    end, debug.traceback)
+    PaletteFX.markTrueColor = originalMark
+    if not ok then error(err, 0) end
+    return result
+  end
+
   local function drawPartyCard(menu, layout, mon, index, trueColorIcons)
     local x, y, width, height = slotGeometry(layout, index)
     local selected = index == menu.index
@@ -564,8 +590,9 @@ return function(mod, genderExports)
     end
 
     gray(WHITE)
-    PartyMenu.drawIcon(menu.game, mon, iconX, iconY,
-      selected and setting("animate_icons", true), menu.blink or 0)
+    drawIconCollectingTrueColor(menu, mon, iconX, iconY,
+      selected and setting("animate_icons", true), menu.blink or 0,
+      trueColorIcons)
     if trueColorIcon then
       trueColorIcons[#trueColorIcons + 1] = {
         x = iconX - 1, y = iconY - 1, w = 18, h = 18,
@@ -576,11 +603,19 @@ return function(mod, genderExports)
         mon.nickname or def.name or mon.species or "?"),
       textX, nameY, x + width - 5 - textX, 1, ink)
     local level = tostring(math.max(1, tonumber(mon.level) or 1))
+    local levelText = (spacious and "LV" or "L") .. level
     local genderWidth = drawGenderGlyph(mon, textX, detailY,
       cardFaceColor(menu, mon, selected), trueColorIcons)
-    drawText((spacious and "LV" or "L") .. level,
+    -- Gender occupies its own eight-pixel cell. On the smallest wide cards,
+    -- the previous percentage allotment was one pixel narrower than "LV12"
+    -- after that cell was removed, so fitText displayed every two-digit level
+    -- as "LV1". The save data was intact; only the final glyph was clipped.
+    -- Always reserve at least the native width of the complete level label.
+    local levelWidth = math.max(Font.width(levelText),
+      math.floor(math.max(24, width * 0.33) - genderWidth))
+    drawText(levelText,
       textX + genderWidth, detailY,
-      math.max(24, width * 0.33) - genderWidth, 1, ink)
+      levelWidth, 1, ink)
 
     local badge
     if menu.tmhm then

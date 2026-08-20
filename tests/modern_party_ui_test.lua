@@ -299,6 +299,43 @@ for _, rect in ipairs(modalMarks) do
     "true-colour icon protection never overlaps the action menu or shadow")
 end
 
+-- Wilds of Kanto 2.1.7 wraps PartyMenu.drawIcon and calls markTrueColor from
+-- inside the shared icon renderer. A taller FOLLOW/field-move popup overlaps
+-- several icon cells, so those third-party claims must pass through the same
+-- dynamic popup cut-out instead of re-blitting the popup as raw grey pixels.
+local tallModalMarks = {}
+PartyMenu.drawIcon = function(_, _, x, y)
+  PaletteFX.markTrueColor(x, y, 16, 16)
+  return true
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  tallModalMarks[#tallModalMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+screen.submenu = true
+screen.subIndex = 1
+screen.subItems = {
+  { label = "STATS" }, { label = "SWITCH" }, { label = "RELEARN" },
+  { label = "RENAME" }, { label = "FOLLOW" },
+}
+local tallModalOK, tallModalErr = pcall(screen.draw, screen)
+screen.submenu = false
+screen.subItems = nil
+PartyMenu.drawIcon = realDrawIcon
+PaletteFX.markTrueColor = realMarkTrueColor
+T.check(tallModalOK,
+  "a tall companion submenu draws: " .. tostring(tallModalErr))
+T.check(#tallModalMarks > 0,
+  "companion icon colour claims remain active outside a tall submenu")
+local tallPopup = { x = 20, y = 24, w = 122, h = 78 }
+for _, rect in ipairs(tallModalMarks) do
+  local overlaps = rect.x < tallPopup.x + tallPopup.w
+    and tallPopup.x < rect.x + rect.w
+    and rect.y < tallPopup.y + tallPopup.h
+    and tallPopup.y < rect.y + rect.h
+  T.check(not overlaps,
+    "companion true-colour claims never repaint a tall action menu grey")
+end
+
 local drawnPaths = {}
 local realDraw = graphics.draw
 graphics.draw = function(image, ...)
@@ -801,8 +838,10 @@ PaletteFX.markTrueColor = realMarkTrueColor
 T.check(genderPartyOK,
   "the gender-aware modern party draws: " .. tostring(genderPartyErr))
 local partyGlyph, strippedPartyName
+local genderLevel
 for _, call in ipairs(genderText) do
   if call.text == "♂" then partyGlyph = call end
+  if call.text:match("^L%d") then genderLevel = call.text end
   if call.text:match("^NIDOR")
       and not call.text:find("♂", 1, true)
       and not call.text:find("♀", 1, true) then
@@ -811,6 +850,8 @@ for _, call in ipairs(genderText) do
 end
 T.check(partyGlyph and partyGlyph.x == 23,
   "the exported gender glyph sits directly before the modern level row")
+T.eq(genderLevel, "L12",
+  "gender spacing never clips a two-digit party level to LV1")
 T.check(strippedPartyName ~= nil,
   "the gender glyph replaces the nickname's baked-in symbol")
 T.check(genderBackings[1] and genderBackings[1].g > genderBackings[1].r
