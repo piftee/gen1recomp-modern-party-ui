@@ -226,7 +226,11 @@ end
 run.loader.modOptions.modern_party_ui = {
   hp_text = "values", exp_text = "percent",
 }
+_G.__modernPartyTestDebug = _G.debug
+_G.debug = nil
 local ok, drawErr = pcall(screen.draw, screen)
+_G.debug = _G.__modernPartyTestDebug
+_G.__modernPartyTestDebug = nil
 PartyMenu.drawIcon = realDrawIcon
 PaletteFX.markTrueColor = realMarkTrueColor
 graphics.scale = realScale
@@ -234,7 +238,8 @@ graphics.rectangle = realRectangle
 graphics.polygon = realPolygon
 Font.draw = realFontDraw
 run.loader.modOptions.modern_party_ui = nil
-T.check(ok, "the card grid draws headlessly: " .. tostring(drawErr))
+T.check(ok, "the card grid draws in the production sandbox without debug: "
+  .. tostring(drawErr))
 T.eq(#iconCalls, #party, "every occupied card uses the shared icon renderer")
 T.eq(iconCalls[1].mon, party[1], "the shared renderer receives the live mon")
 T.eq(iconCalls[1].x, 5,
@@ -440,8 +445,10 @@ graphics.getPixelDimensions = function() return 1600, 845 end
 T.eq(select(1, summary:uiSize()), 320,
   "a short Android landscape display exposes its full responsive width")
 graphics.getPixelDimensions = function() return 360, 800 end
-T.eq(select(1, summary:uiSize()), 160,
-  "a narrow portrait display falls back to the readable classic width")
+T.eq(select(1, summary:uiSize()), 180,
+  "a narrow portrait display uses the width-fitting integer scale")
+T.eq(select(1, screen:uiSize()), 180,
+  "the party roster uses the same portrait-width calculation")
 graphics.getPixelDimensions = function() return 1280, 720 end
 T.eq(select(1, summary:uiSize()), 256,
   "a 16:9 desktop display matches the responsive party surface")
@@ -481,6 +488,36 @@ T.eq(summaryMarks[1].w, protectedSpriteW + 2,
   "summary artwork protection includes a horizontal seam guard")
 T.eq(summaryMarks[1].h, protectedSpriteH + 2,
   "summary artwork protection includes a vertical seam guard")
+
+-- QoL Toggles PARTY SCROLL changes the live SummaryMenu's mon and native
+-- sprite in place. The modern masked-art cache must follow that species even
+-- when both Pokémon resolve to the same palette key.
+do
+local firstModernSprite = summary.modernSprite
+local firstModernPath = summary.modernSpritePath
+local firstSummaryMon, firstSummarySprite = summary.mon, summary.sprite
+local switchedMon = party[2]
+local switchedPath = require("src.pokemon.Sprites").path(
+  game.data, switchedMon.species, "front",
+  { mon = switchedMon, kind = "summary" })
+summary.mon = switchedMon
+summary.sprite = love.graphics.newImage(switchedPath)
+summary.spriteTrueColor = false
+local switchOK, switchErr = pcall(summary.draw, summary)
+T.check(switchOK,
+  "a QoL-style in-place party switch redraws: " .. tostring(switchErr))
+T.check(summary.modernSpriteSpecies == switchedMon.species
+    and summary.modernSpritePath == switchedPath
+    and summary.modernSpritePath ~= firstModernPath,
+  "the modern summary artwork path follows PARTY SCROLL's new Pokémon")
+T.check(summary.modernSprite ~= firstModernSprite,
+  "the previous Pokémon's masked sprite cache is discarded")
+summary.mon, summary.sprite = firstSummaryMon, firstSummarySprite
+summary.spriteTrueColor = false
+summary.modernSpriteSpecies = nil
+summary.modernSprite = nil
+summary.modernSpriteKey = nil
+end
 local attackLabel, attackValue
 for i, call in ipairs(summaryText) do
   if call.text == "ATTACK" then

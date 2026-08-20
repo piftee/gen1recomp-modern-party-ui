@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.10 - 2026-08-20
+
+- Fixed a v0.3.9 production crash caused by using Lua's unavailable `debug` library while collecting third-party icon colour regions.
+- Added QoL Toggles 1.27.0 as an optional dependency and refreshed cached summary artwork when PARTY SCROLL changes Pokémon in place.
+- Corrected responsive integer scaling on tall phone displays so party, summary and ribbon screens use the available width instead of collapsing to 160×144.
+- Added production-sandbox, in-place sprite-switch and portrait-width regression coverage.
+
 ## 0.3.9 - 2026-08-20
 
 - Fixed two-digit party levels being clipped to `LV1` when a gender marker occupied the compact level row.

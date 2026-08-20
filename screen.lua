@@ -106,7 +106,12 @@ return function(mod, genderExports)
       width, height = love.graphics.getDimensions()
     end
     width, height = tonumber(width) or 160, tonumber(height) or SCREEN_H
-    local scale = math.max(1, math.floor(height / SCREEN_H))
+    -- Pick a scale that the complete classic surface can actually fit.
+    -- Height-only scaling collapses tall phones back to 160 pixels wide:
+    -- e.g. 360x800 selected 5x, although only 2x fits horizontally. QoL
+    -- Toggles' party scrolling exposed that bad fallback on every redraw.
+    local scale = math.max(1, math.floor(math.min(
+      width / Renderer.WIDTH, height / SCREEN_H)))
     return math.min(Renderer.MAX_UI_WIDTH or 640,
       math.max(160, math.floor(width / scale)))
   end
@@ -537,9 +542,12 @@ return function(mod, genderExports)
     end
 
     local result
-    local ok, err = xpcall(function()
+    -- The production mod sandbox intentionally does not expose Lua's debug
+    -- library. pcall still guarantees that markTrueColor is restored before
+    -- we rethrow an icon-mod failure, without depending on debug.traceback.
+    local ok, err = pcall(function()
       result = PartyMenu.drawIcon(menu.game, mon, x, y, selected, counter)
-    end, debug.traceback)
+    end)
     PaletteFX.markTrueColor = originalMark
     if not ok then error(err, 0) end
     return result

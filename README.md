@@ -204,12 +204,13 @@ overrides only their presentation and responsive surface methods; this keeps the
 behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
-0.8.4, Crystal 251 0.10.3, DramaticShape, Crystal Animated Sprites with Shiny
-Visuals, Unique Menu Icons, Wilds of Kanto and Pokémon Gold & Silver Sprites
-are listed as optional dependencies so their controller, adapter, stat, art,
-submenu and icon contributions initialize first. Modern Party UI then takes
-presentation ownership of only its two screens while continuing to use their
-live controller methods, exports, sprite frames and icon records.
+0.8.4, Crystal 251 0.10.3, QoL Toggles, DramaticShape, Crystal Animated
+Sprites with Shiny Visuals, Unique Menu Icons, Wilds of Kanto and Pokémon Gold
+& Silver Sprites are listed as optional dependencies so their controller,
+adapter, stat, art, submenu and icon contributions initialize first. Modern
+Party UI then takes presentation ownership of only its two screens while
+continuing to use their live controller methods, exports, sprite frames and
+icon records.
 
 The reported Gen1Recomp 0.1.75 stack on Windows 10 was also audited. Dramatic
 Shape Voxel, Battle EXP Bar, FireRed/LeafGreen Music, cry replacements and

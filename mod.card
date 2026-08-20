@@ -33,6 +33,7 @@ return {
       "DramaticShape 1.8.2 shiny palettes compose through its public module exports",
       "Crystal 251 0.10.3 split stats compose through its public summary export",
       "Wilds of Kanto 2.1.7 icon and submenu hooks compose through the shared party renderer",
+      "QoL Toggles PARTY SCROLL refreshes the modern summary artwork cache",
       "Unknown full-screen replacements still need an adapter for behavior implemented only inside their own screen factory",
     },
   },
