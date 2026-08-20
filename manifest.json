@@ -1,7 +1,7 @@
 {
   "id": "modern_party_ui",
   "name": "Modern Party UI",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "github": "piftee/gen1recomp-modern-party-ui",
   "api": 2,
   "entry": "main.lua",
@@ -21,7 +21,8 @@
     "unique_menu_icons",
     "overworld_wild_spawns",
     "Gold_Silver_Sprites",
-    "qol_toggles"
+    "qol_toggles",
+    "anytime_rename"
   ],
   "conflicts": [],
   "incompatible": [],

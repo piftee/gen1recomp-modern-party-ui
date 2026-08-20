@@ -489,6 +489,65 @@ T.eq(summaryMarks[1].w, protectedSpriteW + 2,
 T.eq(summaryMarks[1].h, protectedSpriteH + 2,
   "summary artwork protection includes a vertical seam guard")
 
+-- Unique Menu Icons publishes fixed party-row true-colour rectangles.  A
+-- PartyMenu -> SummaryMenu transition may happen during the same frame, so
+-- the opaque summary must replace those claims with its own artwork claim.
+PaletteFX.setPass("ui")
+for i = 1, 6 do PaletteFX.markTrueColor(8, i * 16 - 8, 16, 16) end
+T.eq(#PaletteFX.trueColorRects("ui"), 6,
+  "the compatibility fixture seeds six external party-icon colour claims")
+local iconSummaryOK, iconSummaryErr = pcall(summary.draw, summary)
+T.check(iconSummaryOK,
+  "the summary replaces Unique Menu Icons claims: "
+    .. tostring(iconSummaryErr))
+local summaryTrueColor = PaletteFX.trueColorRects("ui")
+T.eq(#summaryTrueColor, 1,
+  "only the current summary artwork remains true-colour protected")
+T.check(not (summaryTrueColor[1].x == 8
+    and summaryTrueColor[1].w == 16 and summaryTrueColor[1].h == 16),
+  "party-icon rectangles cannot leak onto stats or moves pages")
+PaletteFX.clearTrueColor()
+
+-- Anytime Rename 1.2.1 injects a callback-backed NICKNAME party action.
+-- Modern Party UI must leave that action and its native NamingScreen stack
+-- transition intact rather than interpreting it as a presentation command.
+do
+local renameData = T.fixtures.fresh()
+renameData.icons = data.icons
+renameData.palettes = data.palettes
+Font.load(renameData)
+local renameRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/anytime_rename",
+  "mods/modern_party_ui",
+}, { data = renameData, dev = true })
+T.eq(#renameRun.errors, 0, "loads beside Anytime Rename 1.2.1")
+local renameStack = { states = {} }
+function renameStack:push(state) self.states[#self.states + 1] = state end
+function renameStack:pop() return table.remove(self.states) end
+local renameGame = {
+  data = renameRun.data,
+  save = { party = { party[1] }, inventory = {}, options = {} },
+  stack = renameStack,
+  input = { wasPressed = function() return false end },
+}
+local renameItems = Runtime.call("ui.party.submenu",
+  function(_, items) return items end,
+  renameGame, { { label = "STATS" } }, party[1], {})
+local nicknameAction
+for _, item in ipairs(renameItems) do
+  if item.label == "NICKNAME" then nicknameAction = item break end
+end
+T.check(nicknameAction and type(nicknameAction.onSelect) == "function",
+  "the injected NICKNAME action remains reachable")
+local renameOK, renameErr = pcall(nicknameAction.onSelect,
+  party[1], renameGame)
+T.check(renameOK,
+  "the NICKNAME action opens without freezing: " .. tostring(renameErr))
+T.eq(renameStack.states[1] and renameStack.states[1].screenId,
+  "NamingScreen", "the native naming screen is pushed onto the game stack")
+renameRun.release()
+end
+
 -- QoL Toggles PARTY SCROLL changes the live SummaryMenu's mon and native
 -- sprite in place. The modern masked-art cache must follow that species even
 -- when both Pokémon resolve to the same palette key.

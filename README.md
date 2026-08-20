@@ -205,9 +205,10 @@ behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
 0.8.4, Crystal 251 0.10.3, QoL Toggles, DramaticShape, Crystal Animated
-Sprites with Shiny Visuals, Unique Menu Icons, Wilds of Kanto and Pokémon Gold
-& Silver Sprites are listed as optional dependencies so their controller,
-adapter, stat, art, submenu and icon contributions initialize first. Modern
+Sprites with Shiny Visuals, Unique Menu Icons, Anytime Rename 1.2.1, Wilds of
+Kanto and Pokémon Gold & Silver Sprites are listed as optional dependencies so
+their controller, adapter, stat, art, submenu and icon contributions initialize
+first. Modern
 Party UI then takes presentation ownership of only its two screens while
 continuing to use their live controller methods, exports, sprite frames and
 icon records.

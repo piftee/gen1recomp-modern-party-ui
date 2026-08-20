@@ -935,7 +935,22 @@ return function(mod, genderExports, compatibility)
       FOOTER_Y, layout.width - 8, WHITE)
   end
 
+  -- Party-icon packs publish true-colour rectangles after drawing each icon.
+  -- When a submenu action replaces PartyMenu with SummaryMenu in the same
+  -- rendered frame, those party-space rectangles can otherwise be re-blitted
+  -- over this screen as grey squares.  The summary is an opaque UI owner, so
+  -- discard only the UI pass's inherited claims and then let drawProfile add
+  -- the one claim that belongs to the current Pokemon artwork.  Preserve the
+  -- world pass so voxel/battle presentation mods remain untouched.
+  local function clearInheritedUiTrueColor()
+    local rects = PaletteFX.trueColorRects
+      and PaletteFX.trueColorRects("ui") or nil
+    if type(rects) ~= "table" then return end
+    for i = #rects, 1, -1 do rects[i] = nil end
+  end
+
   local function draw(summary)
+    clearInheritedUiTrueColor()
     local layout = layoutFor(summary)
     drawBackdrop(layout)
     drawHeader(summary, layout)
