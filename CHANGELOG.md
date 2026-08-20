@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.12 - 2026-08-20
+
+- Fixed inherited true-colour party-icon rectangles leaking onto the Kanto
+  Ribbons collection during the final summary-page handoff.
+
 ## 0.3.11 - 2026-08-20
 
 - Fixed grey true-colour rectangles leaking from Unique Menu Icons onto the
