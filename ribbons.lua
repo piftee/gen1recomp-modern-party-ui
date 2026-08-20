@@ -375,7 +375,19 @@ return function(mod, _, compatibility)
     drawTextCentered(hint, 4, FOOTER_Y, layout.width - 8, WHITE)
   end
 
+  -- The ribbon collection is a separate opaque UI screen, not a SummaryMenu
+  -- page.  Replace inherited party-icon true-colour claims here as well so a
+  -- same-frame handoff cannot re-blit their old rectangular pixels over the
+  -- profile and ribbon cards.  The world bucket is intentionally untouched.
+  local function clearInheritedUiTrueColor()
+    local rects = PaletteFX.trueColorRects
+      and PaletteFX.trueColorRects("ui") or nil
+    if type(rects) ~= "table" then return end
+    for i = #rects, 1, -1 do rects[i] = nil end
+  end
+
   local function draw(state)
+    clearInheritedUiTrueColor()
     local layout = layoutFor(state)
     local owned = ownedRibbons(state.mon)
     state.scroll = math.max(0, math.min(state.scroll or 0,

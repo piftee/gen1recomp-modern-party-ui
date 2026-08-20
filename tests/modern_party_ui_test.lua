@@ -1077,11 +1077,20 @@ Font.draw = function(text, x, y)
   modernRibbonText[#modernRibbonText + 1] = { text = text, x = x, y = y }
   return realFontDraw(text, x, y)
 end
+PaletteFX.setPass("ui")
+for i = 1, 6 do PaletteFX.markTrueColor(8, i * 16 - 8, 16, 16) end
 local modernRibbonOK, modernRibbonErr = pcall(
   modernRibbonScreen.draw, modernRibbonScreen)
 Font.draw = realFontDraw
 T.check(modernRibbonOK,
   "the modern ribbon cards draw: " .. tostring(modernRibbonErr))
+local ribbonTrueColor = PaletteFX.trueColorRects("ui")
+T.eq(#ribbonTrueColor, 1,
+  "the ribbon screen replaces inherited claims with its profile icon")
+T.check(not (ribbonTrueColor[1].x == 8
+    and ribbonTrueColor[1].w == 16 and ribbonTrueColor[1].h == 16),
+  "party-icon rectangles cannot leak onto the ribbon collection")
+PaletteFX.clearTrueColor()
 local sawRibbonTitle, sawStarter, sawRibbonDescription, sawScrollHint
 for _, call in ipairs(modernRibbonText) do
   if call.text == "RIBBONS" then sawRibbonTitle = true end
