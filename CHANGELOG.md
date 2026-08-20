@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11 - 2026-08-20
+
+- Fixed grey true-colour rectangles leaking from Unique Menu Icons onto the
+  responsive stats and moves pages during same-frame screen transitions.
+- Added verified Anytime Rename 1.2.1 ordering and naming-screen flow coverage.
+
 ## 0.3.10 - 2026-08-20
 
 - Fixed a v0.3.9 production crash caused by using Lua's unavailable `debug` library while collecting third-party icon colour regions.
