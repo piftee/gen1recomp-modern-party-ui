@@ -161,7 +161,8 @@ return function(mod, _, compatibility)
       width, height = love.graphics.getDimensions()
     end
     width, height = tonumber(width) or 160, tonumber(height) or SCREEN_H
-    local scale = math.max(1, math.floor(height / SCREEN_H))
+    local scale = math.max(1, math.floor(math.min(
+      width / Renderer.WIDTH, height / SCREEN_H)))
     return math.min(Renderer.MAX_UI_WIDTH or 640,
       math.max(160, math.floor(width / scale)))
   end

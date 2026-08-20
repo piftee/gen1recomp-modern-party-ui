@@ -98,7 +98,11 @@ return function(mod, genderExports, compatibility)
       width, height = love.graphics.getDimensions()
     end
     width, height = tonumber(width) or 160, tonumber(height) or SCREEN_H
-    local scale = math.max(1, math.floor(height / SCREEN_H))
+    -- Base the integer scale on both axes. A height-only scale makes a tall
+    -- phone request the minimum 160px canvas after an Up/Down party swap,
+    -- leaving the responsive summary as a tiny centred Game Boy viewport.
+    local scale = math.max(1, math.floor(math.min(
+      width / Renderer.WIDTH, height / SCREEN_H)))
     return math.min(Renderer.MAX_UI_WIDTH or 640,
       math.max(160, math.floor(width / scale)))
   end
@@ -443,6 +447,19 @@ return function(mod, genderExports, compatibility)
 
   local function profileSprite(summary)
     if summary.spriteTrueColor then return summary.sprite, true end
+    -- QoL Toggles' PARTY SCROLL updates `self.mon` and the native sprite in
+    -- place instead of constructing a new SummaryMenu. Refresh our separate
+    -- matte/palette source as well; otherwise Pokémon sharing a palette key
+    -- keep drawing the previously selected species from modernSprite.
+    local species = summary.mon and summary.mon.species
+    if summary.modernSpriteSpecies ~= species then
+      summary.modernSpritePath = species and Sprites.path(
+        summary.game.data, species, "front",
+        { mon = summary.mon, kind = "summary" }) or nil
+      summary.modernSpriteSpecies = species
+      summary.modernSprite = nil
+      summary.modernSpriteKey = nil
+    end
     local artPalette, shiny = transformedArtPalette(summary,
       PaletteFX.monPal(summary.game.data, summary.mon.species)
         or primaryPalette(summary))
@@ -992,6 +1009,7 @@ return function(mod, genderExports, compatibility)
       -- matte mask follows asset replacements rather than a private copy.
       summary.modernSpritePath = Sprites.path(game.data, mon.species, "front",
         { mon = mon, kind = "summary" })
+      summary.modernSpriteSpecies = mon.species
       summary.draw = draw
       summary.sgbPalettes = sgbPalettes
       summary.uiSize = uiSize
