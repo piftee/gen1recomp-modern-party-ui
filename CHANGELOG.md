@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.13 - 2026-08-21
+
+- Fixed QoL Toggles' RENAME flow freezing when Gen1 Modern UI 0.9.2's Menu UI
+  presenter was enabled by leaving the child NamingScreen source-owned.
+- Updated the Gen1 Modern UI compatibility fixture from 0.8.4 to 0.9.2 and
+  added the real QoL Toggles 1.27.0 RENAME transition as regression coverage.
+
 ## 0.3.12 - 2026-08-20
 
 - Fixed inherited true-colour party-icon rectangles leaking onto the Kanto

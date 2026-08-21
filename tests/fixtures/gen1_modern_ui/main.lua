@@ -1,7 +1,5 @@
--- Public adapter surface from Gen1 Modern UI 0.8.4. The real compositor only
--- suppresses a matched source screen when canSuppressNative is explicitly
--- true; Modern Party UI deliberately publishes false so its custom renderer
--- remains authoritative for party and summary screens.
+-- Public adapter and naming-screen behavior from Gen1 Modern UI 0.9.2. It
+-- checks registered source screens before classifying its built-in presenters.
 return function(mod)
   mod.exports.registrations = {}
 
@@ -17,6 +15,11 @@ return function(mod)
           return screen.canSuppressNative == true
         end
       end
+    end
+    -- 0.9.2 added a built-in NamingScreen presenter. When Menu UI is on it
+    -- otherwise suppresses the native screen after no adapter claims it.
+    if type(state) == "table" and state.screenId == "NamingScreen" then
+      return true
     end
     return nil
   end

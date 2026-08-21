@@ -1,0 +1,8 @@
+{
+  "id": "qol_toggles",
+  "name": "QoL Toggles Compatibility Fixture",
+  "version": "1.27.0",
+  "api": 2,
+  "entry": "main.lua",
+  "priority": 100
+}
