@@ -138,11 +138,12 @@ one ribbon at a time; wide surfaces use two columns and compact surfaces stack t
 cards. A small controller bridge makes the page order reliable even if another
 mod replaced the update method Kanto Ribbons originally wrapped.
 
-Gen1 Modern UI 0.8.4 is supported through its public `gen1ModernUi` adapter
+Gen1 Modern UI 0.9.2 is supported through its public `gen1ModernUi` adapter
 contract. It explicitly leaves Modern Party UI's custom party and summary
 renderers visible—including submenus, DV data and the responsive ribbon
-collection—while it continues presenting every other supported menu. Its
-**HIDE ORIGINAL UI** setting can remain enabled.
+collection—while it continues presenting every other supported menu. Naming
+opened from a party action also remains native so QoL Toggles' **RENAME** flow
+stays interactive. Its **HIDE ORIGINAL UI** setting can remain enabled.
 
 Modern Party UI loads after the known menu and sprite presentation mods and
 safely replaces an existing `PartyMenu` or `SummaryMenu` record instead of
@@ -204,12 +205,12 @@ overrides only their presentation and responsive surface methods; this keeps the
 behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
-0.8.4, Crystal 251 0.10.3, QoL Toggles, DramaticShape, Crystal Animated
+0.9.2, Crystal 251 0.10.3, QoL Toggles 1.27.0, DramaticShape, Crystal Animated
 Sprites with Shiny Visuals, Unique Menu Icons, Anytime Rename 1.2.1, Wilds of
 Kanto and Pokémon Gold & Silver Sprites are listed as optional dependencies so
 their controller, adapter, stat, art, submenu and icon contributions initialize
 first. Modern
-Party UI then takes presentation ownership of only its two screens while
+Party UI then takes presentation ownership of only its own screens while
 continuing to use their live controller methods, exports, sprite frames and
 icon records.
 

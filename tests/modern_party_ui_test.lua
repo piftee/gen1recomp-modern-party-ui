@@ -548,6 +548,58 @@ T.eq(renameStack.states[1] and renameStack.states[1].screenId,
 renameRun.release()
 end
 
+-- Gen1 Modern UI 0.9.2 added its own NamingScreen presenter. QoL Toggles'
+-- RENAME action opens that built-in screen above PartyMenu; explicitly hand
+-- that one child screen back to the native renderer so it remains visible and
+-- interactive while leaving unrelated naming flows modernizable.
+do
+local renameData = T.fixtures.fresh()
+renameData.icons = data.icons
+renameData.palettes = data.palettes
+Font.load(renameData)
+local renameRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/gen1_modern_ui",
+  "mods/modern_party_ui/tests/fixtures/qol_toggles",
+  "mods/modern_party_ui",
+}, { data = renameData, dev = true })
+T.eq(#renameRun.errors, 0,
+  "loads beside Gen1 Modern UI 0.9.2 and QoL Toggles 1.27.0")
+local renameStack = { states = {} }
+function renameStack:push(state) self.states[#self.states + 1] = state end
+function renameStack:pop() return table.remove(self.states) end
+local renameGame = {
+  data = renameRun.data,
+  save = { party = { party[1] }, inventory = {}, options = {} },
+  stack = renameStack,
+  input = { wasPressed = function() return false end },
+}
+local roster = renameRun.data.screens.PartyMenu.new(renameGame, {})
+renameStack:push(roster)
+local renameItems = Runtime.call("ui.party.submenu",
+  function(_, items) return items end,
+  renameGame, { { label = "STATS" } }, party[1], {})
+local renameAction
+for _, item in ipairs(renameItems) do
+  if item.id == "RENAME" then renameAction = item break end
+end
+T.check(renameAction and type(renameAction.onSelect) == "function",
+  "QoL Toggles' RENAME action remains reachable")
+local renameOK, renameErr = pcall(renameAction.onSelect, party[1], renameGame)
+T.check(renameOK,
+  "QoL Toggles' RENAME action opens without freezing: " .. tostring(renameErr))
+local naming = renameStack.states[#renameStack.states]
+T.eq(naming and naming.screenId, "NamingScreen",
+  "QoL Toggles pushes the native naming screen above the modern party")
+local modernUi = renameRun.loader.exports.gen1_modern_ui
+T.eq(modernUi.shouldSuppress(naming), false,
+  "Gen1 Modern UI leaves the party child NamingScreen source-owned")
+
+local unrelatedNaming = { screenId = "NamingScreen", game = renameGame }
+T.eq(modernUi.shouldSuppress(unrelatedNaming), true,
+  "unrelated naming screens remain available to Gen1 Modern UI")
+renameRun.release()
+end
+
 -- QoL Toggles PARTY SCROLL changes the live SummaryMenu's mon and native
 -- sprite in place. The modern masked-art cache must follow that species even
 -- when both Pokémon resolve to the same palette key.
@@ -987,7 +1039,7 @@ T.check(genderCalls.gender >= 2 and genderCalls.symbol >= 2
 genderRun.release()
 
 -- Kanto Ribbons 0.18.0 owns the icon-rich screen after the last summary
--- page, while Gen1 Modern UI 0.8.4 can otherwise suppress and redraw ordinary
+-- page, while Gen1 Modern UI 0.9.2 can otherwise suppress and redraw ordinary
 -- PartyMenu/SummaryMenu states. Modern Party UI publishes an explicit source
 -- adapter that asks Gen1 Modern UI to preserve these custom renderers, and it
 -- hands the native controller to Kanto Ribbons deterministically.

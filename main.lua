@@ -241,6 +241,26 @@ return function(mod)
   -- other menu in the stack. The small models satisfy the public API contract;
   -- canSuppressNative=false keeps Modern Party UI's responsive renderer in
   -- charge and leaves all controller input source-owned.
+  local function isModernPartyNamingScreen(state)
+    if type(state) ~= "table" or state.screenId ~= "NamingScreen" then
+      return false
+    end
+    local game = state.game
+    local states = game and game.stack and game.stack.states
+    if type(states) ~= "table" then return false end
+
+    -- NamingScreen is pushed above PartyMenu by QoL Toggles (and compatible
+    -- rename actions). Only claim that child transition; ordinary Name Rater,
+    -- starter and player naming screens remain available to Gen1 Modern UI.
+    for index = #states, 2, -1 do
+      if states[index] == state then
+        local parent = states[index - 1]
+        return type(parent) == "table" and parent.modernPartyUI == true
+      end
+    end
+    return false
+  end
+
   mod.exports.gen1ModernUi = {
     apiVersion = 1,
     screens = {
@@ -301,6 +321,19 @@ return function(mod)
               (state.scroll or 0) + 1),
             scroll = state.scroll or 0,
             footer = { "A/B back" },
+          }
+        end,
+        layer = "screen",
+        canSuppressNative = false,
+      },
+      ModernPartyNaming = {
+        match = isModernPartyNamingScreen,
+        model = function(_, state)
+          return {
+            title = state.title or "NICKNAME?",
+            rows = {},
+            index = 1,
+            footer = { "NamingScreen remains source-owned" },
           }
         end,
         layer = "screen",
