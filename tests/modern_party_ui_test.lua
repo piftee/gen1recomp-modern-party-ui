@@ -775,7 +775,8 @@ local hgssCalls = hgssRun.loader.exports.HGSS_SPRITES.calls
 T.eq(#hgssCalls, 0,
   "the fitted path bypasses HGSS's padded full-frame renderer")
 
--- Frame 48 is in frame two for every healthy/yellow/red HGSS cadence.
+-- Frame 48 reaches frame two at every healthy/yellow/red HGSS cadence, but
+-- only the focused card may use it.
 hgssScreen.blink = 48
 local beforeAnimated = #fittedDraws
 local animateOK, animateErr = pcall(hgssScreen.draw, hgssScreen)
@@ -784,8 +785,10 @@ T.check(animateOK,
 for i = beforeAnimated + 1, beforeAnimated + #party do
   local resting = fittedDraws[i - beforeAnimated]
   local moving = fittedDraws[i]
-  T.check(moving and moving.quad.y >= 32,
-    "the fitted HGSS renderer advances card " .. i .. " to frame two")
+  local card = i - beforeAnimated
+  T.check(moving and ((card == hgssScreen.index and moving.quad.y >= 32)
+      or (card ~= hgssScreen.index and moving.quad.y < 32)),
+    "only the highlighted HGSS party card advances to frame two")
   T.check(resting and moving
       and resting.quad.x == moving.quad.x
       and resting.quad.y % 32 == moving.quad.y % 32
@@ -794,6 +797,19 @@ for i = beforeAnimated + 1, beforeAnimated + #party do
       and resting.x == moving.x and resting.y == moving.y
       and resting.sx == moving.sx and resting.sy == moving.sy,
     "card " .. i .. " keeps a shared crop so the authored bob remains visible")
+end
+
+hgssScreen.index = 2
+local beforeMovedFocus = #fittedDraws
+local movedFocusOK, movedFocusErr = pcall(hgssScreen.draw, hgssScreen)
+T.check(movedFocusOK,
+  "moving HGSS party focus redraws: " .. tostring(movedFocusErr))
+for i = beforeMovedFocus + 1, beforeMovedFocus + #party do
+  local card = i - beforeMovedFocus
+  local draw = fittedDraws[i]
+  T.check(draw and ((card == 2 and draw.quad.y >= 32)
+      or (card ~= 2 and draw.quad.y < 32)),
+    "HGSS animation follows the newly highlighted party card")
 end
 
 hgssRun.loader.modOptions.modern_party_ui = { animate_icons = false }

@@ -805,10 +805,11 @@ return function(mod, genderExports, compatibility)
     end
 
     gray(WHITE)
-    -- ICON ANIMATION deliberately animates every visible card, which makes
-    -- the setting obvious instead of only moving the focused icon.
+    -- Keep the roster calm and make focus immediately readable: the shared
+    -- animation setting enables movement, while selection decides which one
+    -- of the visible cards is allowed to advance beyond its resting frame.
     local regionCount = #trueColorIcons
-    local animate = setting("animate_icons", true)
+    local animate = setting("animate_icons", true) and selected
     local fitted = hgssIcon and drawFittedHgssIcon(menu, mon, entry,
       iconX, iconY, animate, menu.blink or 0, iconSize, trueColorIcons)
     if not fitted then

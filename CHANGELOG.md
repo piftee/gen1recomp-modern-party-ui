@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.16 - 2026-08-22
+
+- ICON ANIMATION now follows party focus: only the highlighted Pokémon moves,
+  while every other visible card remains on its resting frame.
+- HGSS animation follows the cursor immediately when the highlighted party
+  card changes, without altering its fitted alignment or colour protection.
+
 ## 0.3.15 - 2026-08-22
 
 - Consolidated all eight in-game settings behind one MODERN PARTY UI entry in
