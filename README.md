@@ -73,7 +73,7 @@ party screen draws.
 | Empty Slots | Show or hide unused party positions |
 | Backdrop | Diagonal grid or plain background |
 | Widescreen | Fill the available width or use classic 160×144 |
-| Icon Animation | Animate every visible party icon or hold their resting frames |
+| Icon Animation | Animate only the highlighted party icon or hold every icon on its resting frame |
 
 ## Type palette
 
