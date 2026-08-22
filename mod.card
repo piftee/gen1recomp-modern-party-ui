@@ -4,15 +4,17 @@ return {
   tags = { "ui", "quality-of-life", "cosmetic" },
   differences = {
     changed = {
-      "Responsive two-column party-card layout and grid navigation",
+      "Responsive two-column landscape and full-height portrait party layouts",
       "HP, status and type information hierarchy",
       "Both Pokémon summary pages and their responsive information layout",
     },
     added = {
       "Eight configurable presentation settings",
       "Widescreen party surfaces that expand to the available display width",
+      "Full-height party targeting when opened from Modern Bag UI on portrait displays",
       "Visible empty party slots",
       "Selected Pokémon type summary",
+      "HGSS Visual Overhaul party-icon compatibility",
       "Reference-matched primary-type card colours with a species-palette fallback",
       "A larger black focus frame for the selected Pokémon",
       "Responsive stats, EXP and move cards on Pokémon summaries",
@@ -24,7 +26,7 @@ return {
       "Responsive Special Attack, Special Defense and split-DV cards for compatible overhaul mods",
       "True-colour protection for authored replacement menu icons",
       "Popup-safe full-colour icons and FOLLOW actions from Wilds of Kanto",
-      "Direct access to every setting from the game's main Options menu",
+      "One dedicated Modern Party UI settings page inside the game's Options menu",
     },
     known = {
       "Uses the engine_internals permission to retain the complete built-in party controller",

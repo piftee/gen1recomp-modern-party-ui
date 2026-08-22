@@ -29,21 +29,23 @@ return function(game)
     local OptionsMenu = require("src.ui.OptionsMenu")
     local options = OptionsMenu.new(game)
     game.stack:push(options)
-    local first
+    local entry
     for i, row in ipairs(options.rows) do
-      if row.id == "modern_party_ui_card_color" then first = i break end
+      if row.id == "modern_party_ui" then entry = row break end
     end
-    if not first then
-      U.log("FAIL Modern Party UI rows are missing from Options")
+    if not entry or type(entry.activate) ~= "function" then
+      U.log("FAIL Modern Party UI page is missing from Options")
       return
     end
-    options.index, options.scroll = first, first - 1
+    entry.activate(game)
+    options = game.stack:top()
+    options.index, options.scroll = 1, 0
     U.wait(8)
-    U.log("PASS first four Modern Party UI settings are in Options")
+    U.log("PASS icon animation is visible on the first Modern Party UI page")
     U.shot(game, DIR .. "/modern_party_ui_options_1.png")
-    options.index, options.scroll = first + 4, first + 3
+    options.index, options.scroll = 8, 4
     U.wait(8)
-    U.log("PASS remaining Modern Party UI settings are in Options")
+    U.log("PASS all remaining settings are on the Modern Party UI page")
     U.shot(game, DIR .. "/modern_party_ui_options_2.png")
     return
   end

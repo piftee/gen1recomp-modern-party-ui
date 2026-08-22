@@ -1,20 +1,24 @@
--- Modern two-column presentation for src.ui.PartyMenu.
+-- Responsive card presentation for src.ui.PartyMenu.
 --
 -- Construction and actions still delegate to the engine controller. This
 -- module adds a card-grid renderer and a thin navigation adapter; item use,
 -- TM/HM checks, field moves, switching, healing and callbacks remain native.
-return function(mod, genderExports)
+return function(mod, genderExports, compatibility)
+  compatibility = compatibility or {}
   local PartyMenu = require("src.ui.PartyMenu")
   local Font = require("src.render.Font")
   local Growth = require("src.pokemon.Growth")
   local PaletteFX = require("src.render.PaletteFX")
+  local Assets = require("src.render.Assets")
+  local Sprites = require("src.pokemon.Sprites")
   local Renderer = require("src.render.Renderer")
   local Theme = require("src.ui.Theme")
 
   local SCREEN_H = 144
   local HEADER_H = 16
-  local FOOTER_Y = 136
   local DEFAULT_CAPACITY = 6
+  local PORTRAIT_MIN_H = 224
+  local PORTRAIT_MAX_H = 400
 
   local WHITE = 1
   local LIGHT = 170 / 255
@@ -63,6 +67,7 @@ return function(mod, genderExports)
   end
 
   local inkShader -- false when unavailable
+  local fittedHgssIcons = {}
   local cardPalette -- assigned after the draw helpers
 
   local function cardFaceColor(menu, mon, selected)
@@ -97,8 +102,8 @@ return function(mod, genderExports)
     return (constants and constants.partyMax) or DEFAULT_CAPACITY
   end
 
-  local function responsiveWidth()
-    if not setting("responsive", true) then return 160 end
+  local function responsiveWindowSize()
+    if not setting("responsive", true) then return 160, SCREEN_H end
     local width, height
     if love.graphics.getPixelDimensions then
       width, height = love.graphics.getPixelDimensions()
@@ -106,6 +111,17 @@ return function(mod, genderExports)
       width, height = love.graphics.getDimensions()
     end
     width, height = tonumber(width) or 160, tonumber(height) or SCREEN_H
+
+    -- Match Modern Bag UI's portrait surface exactly. Both entry points then
+    -- choose the same native canvas before either screen draws, eliminating
+    -- the black void and the resize when the party picker is pushed or popped.
+    local portraitScale = math.max(1, math.floor(width / 160))
+    local portraitHeight = math.min(PORTRAIT_MAX_H,
+      math.floor(height / portraitScale))
+    if height >= width * 1.35 and portraitHeight >= PORTRAIT_MIN_H then
+      return 160, portraitHeight
+    end
+
     -- Pick a scale that the complete classic surface can actually fit.
     -- Height-only scaling collapses tall phones back to 160 pixels wide:
     -- e.g. 360x800 selected 5x, although only 2x fits horizontally. QoL
@@ -113,32 +129,84 @@ return function(mod, genderExports)
     local scale = math.max(1, math.floor(math.min(
       width / Renderer.WIDTH, height / SCREEN_H)))
     return math.min(Renderer.MAX_UI_WIDTH or 640,
-      math.max(160, math.floor(width / scale)))
+      math.max(160, math.floor(width / scale))), SCREEN_H
   end
 
-  local function uiSize()
-    return responsiveWidth(), SCREEN_H
+  -- Bag item use pushes PartyMenu above the responsive Bag surface. Keep
+  -- that exact surface while the player chooses a target: otherwise the
+  -- renderer changes from (for example) 160x330 back to 180x144 on a phone,
+  -- making the party screen jump and exposing the previous frame beneath it.
+  -- Only inherit from a Bag below this exact menu instance, so ordinary party,
+  -- battle and summary screens keep their established responsive dimensions.
+  local function parentBagSurface(menu)
+    if not (setting("responsive", true) and type(menu) == "table") then
+      return nil
+    end
+    local stack = menu.game and menu.game.stack
+    local states = stack and stack.states
+    if type(states) ~= "table" then return nil end
+
+    local menuIndex
+    for index = #states, 1, -1 do
+      if states[index] == menu then
+        menuIndex = index
+        break
+      end
+    end
+    if not menuIndex then return nil end
+
+    for index = menuIndex - 1, 1, -1 do
+      local candidate = states[index]
+      if candidate and candidate.modernBagUI
+          and type(candidate.uiSize) == "function" then
+        local ok, width, height = pcall(candidate.uiSize, candidate)
+        width, height = tonumber(width), tonumber(height)
+        if ok and width and height and width >= 160 and height >= SCREEN_H then
+          menu.modernPartyParentSurface = "modern_bag_ui"
+          return math.floor(width), math.floor(height)
+        end
+      end
+    end
+    return nil
+  end
+
+  local function responsiveSize(menu)
+    local width, height = parentBagSurface(menu)
+    if width then return width, height end
+    return responsiveWindowSize()
+  end
+
+  local function uiSize(menu)
+    return responsiveSize(menu)
   end
 
   local function layoutFor(menu)
-    local width = responsiveWidth()
+    local width, height = responsiveSize(menu)
     local renderer = menu and menu.game and menu.game.renderer
     if setting("responsive", true) and renderer and renderer.uiSize then
-      width = select(1, renderer:uiSize()) or width
+      local rendererW, rendererH = renderer:uiSize()
+      width, height = rendererW or width, rendererH or height
     end
     width = math.max(160, math.floor(width))
-    -- The reference layout is always a two-column party: wider displays make
-    -- those cards broader instead of shrinking the Gen 1 font into a third
-    -- column. This keeps the hierarchy readable at every aspect ratio.
-    local columns = 2
+    height = math.max(SCREEN_H, math.floor(height))
+    -- Landscape and desktop keep the reference's two-column party. A tall
+    -- phone stacks the six cards vertically no matter how the screen opened:
+    -- this uses the extra height, gives names and meters the complete readable
+    -- width, and keeps the experience stable between menu and Bag entry.
+    local portrait = height >= 224 and height >= width * 1.35
+    local columns = portrait and 1 or 2
     local capacity = math.min(DEFAULT_CAPACITY, capacityOf(menu))
     local rows = math.max(1, math.ceil(capacity / columns))
+    local footerY = height - 8
     return {
       width = width,
+      height = height,
+      footerY = footerY,
+      portrait = portrait,
       columns = columns,
       rows = rows,
       capacity = capacity,
-      contentHeight = FOOTER_Y - HEADER_H,
+      contentHeight = footerY - HEADER_H,
     }
   end
 
@@ -324,15 +392,15 @@ return function(mod, genderExports)
 
   local function drawBackdrop(layout)
     gray(WHITE)
-    love.graphics.rectangle("fill", 0, 0, layout.width, SCREEN_H)
+    love.graphics.rectangle("fill", 0, 0, layout.width, layout.height)
     if setting("pattern", "grid") ~= "grid" then return end
 
     -- A restrained diagonal grid nods to the reference screen's hex field,
     -- but is still drawn from the Game Boy's four shades.
     gray(LIGHT)
-    for x = -SCREEN_H, layout.width, 16 do
-      love.graphics.line(x, 0, x + SCREEN_H, SCREEN_H)
-      love.graphics.line(x + SCREEN_H, 0, x, SCREEN_H)
+    for x = -layout.height, layout.width, 16 do
+      love.graphics.line(x, 0, x + layout.height, layout.height)
+      love.graphics.line(x + layout.height, 0, x, layout.height)
     end
   end
 
@@ -415,13 +483,14 @@ return function(mod, genderExports)
     return y + height - 17, y + height - 9, barX, barW
   end
 
-  local function iconGeometry(x, y, width, height)
+  local function iconGeometry(x, y, width, height, iconSize)
+    iconSize = math.max(1, math.floor(tonumber(iconSize) or 16))
     local hpY = meterGeometry(x, y, width, height)
     local left, top = x + 3, y + 3
     local availableW = contentInset(width) - 3
     local availableH = hpY - top
-    return left + math.max(0, math.floor((availableW - 16) / 2)),
-      top + math.max(0, math.floor((availableH - 16) / 2))
+    return left + math.max(0, math.floor((availableW - iconSize) / 2)),
+      top + math.max(0, math.floor((availableH - iconSize) / 2))
   end
 
   local function drawMeter(fraction, rowY, barX, barW, nonzero)
@@ -532,12 +601,30 @@ return function(mod, genderExports)
   -- icon claims are published together after the popup's real bounds are
   -- known, through markTrueColorOutside below.
   local function drawIconCollectingTrueColor(menu, mon, x, y, selected,
-      counter, regions)
+      counter, regions, background, iconScale, opaqueRuns)
+    local scale = tonumber(iconScale) or 1
     local originalMark = PaletteFX.markTrueColor
     PaletteFX.markTrueColor = function(rx, ry, rw, rh)
       rx, ry, rw, rh = tonumber(rx), tonumber(ry), tonumber(rw), tonumber(rh)
-      if rx and ry and rw and rh and rw > 0 and rh > 0 then
-        regions[#regions + 1] = { x = rx, y = ry, w = rw, h = rh }
+      if opaqueRuns then
+        for _, run in ipairs(opaqueRuns) do
+          regions[#regions + 1] = {
+            x = x + run.x * scale, y = y + run.y * scale,
+            w = math.max(1, run.w * scale), h = math.max(1, scale),
+          }
+        end
+      elseif rx and ry and rw and rh and rw > 0 and rh > 0 then
+        regions[#regions + 1] = {
+          x = x + (rx - x) * scale,
+          y = y + (ry - y) * scale,
+          w = rw * scale,
+          h = rh * scale,
+        }
+        if background then
+          love.graphics.setColor(background[1] / 255,
+            background[2] / 255, background[3] / 255, 1)
+          love.graphics.rectangle("fill", rx, ry, rw, rh)
+        end
       end
     end
 
@@ -545,12 +632,121 @@ return function(mod, genderExports)
     -- The production mod sandbox intentionally does not expose Lua's debug
     -- library. pcall still guarantees that markTrueColor is restored before
     -- we rethrow an icon-mod failure, without depending on debug.traceback.
+    love.graphics.push("all")
+    if scale ~= 1 then
+      love.graphics.translate(x, y)
+      love.graphics.scale(scale, scale)
+      love.graphics.translate(-x, -y)
+    end
     local ok, err = pcall(function()
       result = PartyMenu.drawIcon(menu.game, mon, x, y, selected, counter)
     end)
+    love.graphics.pop()
     PaletteFX.markTrueColor = originalMark
     if not ok then error(err, 0) end
     return result
+  end
+
+  local function drawFittedHgssIcon(menu, mon, entry, x, y, animate,
+      counter, target, regions)
+    if not (love.image and love.image.newImageData
+        and love.graphics.newQuad) then return false end
+    local path = Sprites.iconPath(menu.game.data, mon, entry.image, {})
+    if type(path) ~= "string" then return false end
+    local cached = fittedHgssIcons[path]
+    if cached == nil then
+      local okData, data = pcall(Assets.imageData, path)
+      local okImage, image = pcall(Assets.image, path)
+      if not okData or not data or not okImage or not image then
+        fittedHgssIcons[path] = false
+      else
+        local iw, ih = data:getDimensions()
+        local rawFrames = {}
+        for frame = 0, math.min(1, math.floor(ih / 32) - 1) do
+          local minX, minY, maxX, maxY = 32, 32, -1, -1
+          local runs = {}
+          for py = 0, math.min(31, ih - frame * 32 - 1) do
+            local start
+            for px = 0, math.min(31, iw - 1) do
+              local _, _, _, alpha = data:getPixel(px, frame * 32 + py)
+              local opaque = (alpha or 0) > 0.01
+              if opaque then
+                minX, minY = math.min(minX, px), math.min(minY, py)
+                maxX, maxY = math.max(maxX, px), math.max(maxY, py)
+              end
+              if opaque and not start then start = px end
+              if start and (not opaque or px == math.min(31, iw - 1)) then
+                local finish = opaque and px or px - 1
+                runs[#runs + 1] = { x = start, y = py,
+                  w = finish - start + 1 }
+                start = nil
+              end
+            end
+          end
+          if maxX >= minX and maxY >= minY then
+            rawFrames[frame] = { minX = minX, minY = minY,
+              maxX = maxX, maxY = maxY, runs = runs }
+          end
+        end
+        -- HGSS authors animate many icons by shifting the opaque pixels one
+        -- row inside an otherwise identical 32x32 frame. Use one crop for
+        -- both frames so that fitting/centring does not cancel that motion.
+        local unionMinX, unionMinY, unionMaxX, unionMaxY
+        for _, raw in pairs(rawFrames) do
+          unionMinX = unionMinX and math.min(unionMinX, raw.minX) or raw.minX
+          unionMinY = unionMinY and math.min(unionMinY, raw.minY) or raw.minY
+          unionMaxX = unionMaxX and math.max(unionMaxX, raw.maxX) or raw.maxX
+          unionMaxY = unionMaxY and math.max(unionMaxY, raw.maxY) or raw.maxY
+        end
+        local frames = {}
+        if unionMinX then
+          for frame, raw in pairs(rawFrames) do
+            frames[frame] = {
+              x = unionMinX, y = frame * 32 + unionMinY,
+              w = unionMaxX - unionMinX + 1,
+              h = unionMaxY - unionMinY + 1,
+              runs = raw.runs,
+            }
+          end
+        end
+        cached = { image = image, iw = iw, ih = ih, frames = frames }
+        fittedHgssIcons[path] = cached
+      end
+    end
+    if not cached then return false end
+    local alt = false
+    if animate then
+      local maxHP = mon.stats and mon.stats.hp or 1
+      local hpPixels = math.floor((mon.hp or 0) * 48 / math.max(1, maxHP))
+      local speed = hpPixels >= 27 and 5 or hpPixels >= 10 and 16 or 32
+      alt = math.floor((counter or 0) / speed) % 2 == 1
+    end
+    local bounds = cached.frames[alt and 1 or 0] or cached.frames[0]
+    if not bounds then return false end
+
+    -- Fit the visible creature, not HGSS's transparent 32px source canvas.
+    -- The authored art is deliberately compact inside that canvas, which is
+    -- why merely drawing the source at 32px still looked tiny.
+    local fittedScale = math.min(target / bounds.w, target / bounds.h)
+    local drawW, drawH = bounds.w * fittedScale, bounds.h * fittedScale
+    local drawX = math.floor(x + (target - drawW) / 2 + 0.5)
+    local drawY = math.floor(y + (target - drawH) / 2 + 0.5)
+    local quad = love.graphics.newQuad(bounds.x, bounds.y,
+      bounds.w, bounds.h, cached.iw, cached.ih)
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(cached.image, quad, drawX, drawY, 0,
+      fittedScale, fittedScale)
+    love.graphics.pop()
+    for _, run in ipairs(bounds.runs or {}) do
+      regions[#regions + 1] = {
+        x = drawX + (run.x - bounds.x) * fittedScale,
+        y = drawY + (run.y - (bounds.y % 32)) * fittedScale,
+        w = math.max(1, run.w * fittedScale),
+        h = math.max(1, fittedScale),
+      }
+    end
+    return true
   end
 
   local function drawPartyCard(menu, layout, mon, index, trueColorIcons)
@@ -562,8 +758,6 @@ return function(mod, genderExports)
     shown.hp = math.max(0, shown.hp or 0)
     local ink = selected and BLACK or WHITE
     local spacious = width >= 110
-    local iconX, iconY = iconGeometry(x, y, width, height)
-    local textX = x + contentInset(width)
     local nameY = y + 6
     local detailY = nameY + 10
     local hpY, expY = meterGeometry(x, y, width, height)
@@ -577,33 +771,59 @@ return function(mod, genderExports)
     local entry = (icons.bySpecies and icons.bySpecies[mon.species])
       or (def and def.icon)
     local trueColorIcon = false
+    local hgssIcon = false
     if type(entry) == "table" then
       local path = tostring(entry.image or ""):lower()
       local paletteAware = path:find("icons_original", 1, true) ~= nil
       trueColorIcon = not paletteAware
         or PartyMenu._uniqueMenuIconsTrueColorWrapped == true
+      hgssIcon = compatibility.hgssSprites and entry.trueColor == true
+        and path:find("assets/icons/", 1, true) ~= nil
+        and path:find("hgss", 1, true) ~= nil
     end
 
-    -- A true-colour zone restores the complete 16x16 canvas rectangle, not
+    -- Fit HGSS's visible creature into this rail. Its 32px source frame has
+    -- substantial transparent padding, so scaling the complete frame leaves
+    -- the actual sprite much smaller than the available card space.
+    local iconSize = hgssIcon and (spacious and 32 or 22) or 16
+    local iconScale = hgssIcon and iconSize / 32 or 1
+    local iconX, iconY = iconGeometry(x, y, width, height, iconSize)
+    local textX = math.max(x + contentInset(width), iconX + iconSize + 2)
+
+    -- A true-colour zone restores the complete icon canvas rectangle, not
     -- just the icon's opaque pixels. Paint the card's final display colour
     -- behind the transparent pixels first, so that restore cannot reveal the
     -- raw gray pre-palette card as a square backplate.
-    if trueColorIcon then
+    if trueColorIcon and not hgssIcon then
       local background = cardFaceColor(menu, mon, selected)
       if background then
         love.graphics.setColor(background[1] / 255, background[2] / 255,
           background[3] / 255, 1)
-        love.graphics.rectangle("fill", iconX - 1, iconY - 1, 18, 18)
+        love.graphics.rectangle("fill", iconX - 1, iconY - 1,
+          iconSize + 2, iconSize + 2)
       end
     end
 
     gray(WHITE)
-    drawIconCollectingTrueColor(menu, mon, iconX, iconY,
-      selected and setting("animate_icons", true), menu.blink or 0,
-      trueColorIcons)
-    if trueColorIcon then
+    -- ICON ANIMATION deliberately animates every visible card, which makes
+    -- the setting obvious instead of only moving the focused icon.
+    local regionCount = #trueColorIcons
+    local animate = setting("animate_icons", true)
+    local fitted = hgssIcon and drawFittedHgssIcon(menu, mon, entry,
+      iconX, iconY, animate, menu.blink or 0, iconSize, trueColorIcons)
+    if not fitted then
+      drawIconCollectingTrueColor(menu, mon, iconX, iconY,
+        animate, menu.blink or 0, trueColorIcons,
+        hgssIcon and nil or cardFaceColor(menu, mon, selected),
+        iconScale)
+    end
+    -- Renderers such as HGSS publish their exact transformed rectangle from
+    -- inside PartyMenu.drawIcon. Only add the generic safety rectangle when
+    -- a true-colour renderer did not claim one itself.
+    if trueColorIcon and #trueColorIcons == regionCount then
       trueColorIcons[#trueColorIcons + 1] = {
-        x = iconX - 1, y = iconY - 1, w = 18, h = 18,
+        x = iconX - 1, y = iconY - 1,
+        w = iconSize + 2, h = iconSize + 2,
       }
     end
 
@@ -669,12 +889,12 @@ return function(mod, genderExports)
 
   local function drawFooter(menu, party, layout)
     gray(DARK)
-    love.graphics.rectangle("fill", 0, FOOTER_Y, layout.width, 8)
+    love.graphics.rectangle("fill", 0, layout.footerY, layout.width, 8)
     local text = footerText(menu, party)
     local maxWidth = layout.width - 8
     text = fitText(text, maxWidth)
     local width = Font.width(text)
-    drawText(text, (layout.width - width) / 2, FOOTER_Y,
+    drawText(text, (layout.width - width) / 2, layout.footerY,
       maxWidth, 1, WHITE)
   end
 
@@ -683,7 +903,7 @@ return function(mod, genderExports)
     local height = 16 + count * 12
     local width = math.min(120, layout.width - 16)
     return math.floor((layout.width - width) / 2),
-      math.floor((FOOTER_Y - height) / 16) * 8, width, height
+      math.floor((layout.footerY - height) / 16) * 8, width, height
   end
 
   local function drawSubmenu(menu, layout)
@@ -807,7 +1027,7 @@ return function(mod, genderExports)
     if not base then return nil end
 
     local zones = { {
-      colors = base, x = 0, y = 0, w = layout.width, h = SCREEN_H,
+      colors = base, x = 0, y = 0, w = layout.width, h = layout.height,
     } }
     local party = partyOf(menu)
     for i, mon in ipairs(party) do
@@ -933,6 +1153,7 @@ return function(mod, genderExports)
       end
       menu.modernPartyUI = true
       menu.modernPartyLayout = "cards"
+      menu.modernPartyLayoutInfo = function() return layoutFor(menu) end
       return menu
     end,
   }

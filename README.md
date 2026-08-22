@@ -35,6 +35,8 @@ Red, Blue, or Yellow ROM imported into
 - action menus use a centered card overlay with a highlighted action
 - the UI expands horizontally to use the full available integer-scaled surface;
   wide displays get broader cards rather than a centered 160px strip
+- on portrait phones, both direct menu entry and Modern Bag UI item targeting
+  use the same full-height surface with six stacked, full-width party cards
 - the STATS summary page uses a responsive profile rail, HP/status card and
   four clear stat cards—or five when a compatible mod splits Special Attack
   and Special Defense
@@ -56,10 +58,11 @@ Kanto Ribbons handoff is added without replacing its ribbon screen.
 
 ## Settings
 
-The settings appear directly in the game's ordinary **OPTIONS** screen as the
-eight `PARTY` rows. They are also available from
-**START → MODS → Modern Party UI → OPTIONS..**. Both locations edit the same
-saved values, and changes appear the next time the party screen draws.
+The game's ordinary **OPTIONS** screen contains one **MODERN PARTY UI → OPEN**
+entry. Open it for a dedicated page containing all eight settings. They are
+also available from **START → MODS → Modern Party UI → OPTIONS..**. Both
+locations edit the same saved values, and changes appear the next time the
+party screen draws.
 
 | Setting | Choices |
 | --- | --- |
@@ -70,7 +73,7 @@ saved values, and changes appear the next time the party screen draws.
 | Empty Slots | Show or hide unused party positions |
 | Backdrop | Diagonal grid or plain background |
 | Widescreen | Fill the available width or use classic 160×144 |
-| Icon Anim | Animate the focused menu icon or hold its resting frame |
+| Icon Animation | Animate every visible party icon or hold their resting frames |
 
 ## Type palette
 
@@ -206,7 +209,8 @@ behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
 0.9.2, Crystal 251 0.10.3, QoL Toggles 1.27.0, DramaticShape, Crystal Animated
-Sprites with Shiny Visuals, Unique Menu Icons, Anytime Rename 1.2.1, Wilds of
+Sprites with Shiny Visuals, Unique Menu Icons, HGSS Visual Overhaul 1.0.0,
+Anytime Rename 1.2.1, Wilds of
 Kanto and Pokémon Gold & Silver Sprites are listed as optional dependencies so
 their controller, adapter, stat, art, submenu and icon contributions initialize
 first. Modern

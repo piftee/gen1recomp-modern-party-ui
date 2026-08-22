@@ -4,10 +4,13 @@
 -- export decide what appears. This screen owns only the same card-based,
 -- responsive presentation used by the party and summary screens.
 return function(mod, _, compatibility)
+  compatibility = compatibility or {}
+  local Assets = require("src.render.Assets")
   local Font = require("src.render.Font")
   local PaletteFX = require("src.render.PaletteFX")
   local PartyMenu = require("src.ui.PartyMenu")
   local Renderer = require("src.render.Renderer")
+  local Sprites = require("src.pokemon.Sprites")
 
   local exports = compatibility and compatibility.kantoRibbonsExports or {}
   local catalog = type(exports.catalog) == "table" and exports.catalog or {}
@@ -55,11 +58,128 @@ return function(mod, _, compatibility)
   }
 
   local inkShader
+  local fittedHgssIcons = {}
 
   local function setting(key, fallback)
     local ok, value = pcall(mod.options.get, mod.options, key)
     if not ok or value == nil then return fallback end
     return value
+  end
+
+  local function animationCounter(state)
+    local counter = tonumber(state and state.blink) or 0
+    if love.timer and love.timer.getTime then
+      local ok, seconds = pcall(love.timer.getTime)
+      if ok and tonumber(seconds) then
+        counter = math.max(counter, math.floor(seconds * 60))
+      end
+    end
+    return counter
+  end
+
+  local function isHgssEntry(entry)
+    if not compatibility.hgssSprites or type(entry) ~= "table"
+        or entry.trueColor ~= true then return false end
+    local path = tostring(entry.image or ""):lower()
+    return path:find("assets/icons/", 1, true) ~= nil
+      and path:find("hgss", 1, true) ~= nil
+  end
+
+  local function drawFittedHgssIcon(state, entry, x, y, target)
+    if not (love.image and love.image.newImageData
+        and love.graphics.newQuad) then return false end
+    local path = Sprites.iconPath(state.game.data, state.mon,
+      entry.image, {})
+    if type(path) ~= "string" then return false end
+    local cached = fittedHgssIcons[path]
+    if cached == nil then
+      local okData, data = pcall(Assets.imageData, path)
+      local okImage, image = pcall(Assets.image, path)
+      if not okData or not data or not okImage or not image then
+        fittedHgssIcons[path] = false
+      else
+        local iw, ih = data:getDimensions()
+        local rawFrames = {}
+        for frame = 0, math.min(1, math.floor(ih / 32) - 1) do
+          local minX, minY, maxX, maxY = 32, 32, -1, -1
+          local runs = {}
+          for py = 0, math.min(31, ih - frame * 32 - 1) do
+            local start
+            for px = 0, math.min(31, iw - 1) do
+              local _, _, _, alpha = data:getPixel(px, frame * 32 + py)
+              local opaque = (alpha or 0) > 0.01
+              if opaque then
+                minX, minY = math.min(minX, px), math.min(minY, py)
+                maxX, maxY = math.max(maxX, px), math.max(maxY, py)
+              end
+              if opaque and not start then start = px end
+              if start and (not opaque or px == math.min(31, iw - 1)) then
+                local finish = opaque and px or px - 1
+                runs[#runs + 1] = { x = start, y = py,
+                  w = finish - start + 1 }
+                start = nil
+              end
+            end
+          end
+          if maxX >= minX and maxY >= minY then
+            rawFrames[frame] = { minX = minX, minY = minY,
+              maxX = maxX, maxY = maxY, runs = runs }
+          end
+        end
+        -- Keep both animation frames in one shared local envelope. Several
+        -- HGSS icons animate through a one-pixel internal bob; independently
+        -- centring each frame makes that authored movement disappear.
+        local unionMinX, unionMinY, unionMaxX, unionMaxY
+        for _, raw in pairs(rawFrames) do
+          unionMinX = unionMinX and math.min(unionMinX, raw.minX) or raw.minX
+          unionMinY = unionMinY and math.min(unionMinY, raw.minY) or raw.minY
+          unionMaxX = unionMaxX and math.max(unionMaxX, raw.maxX) or raw.maxX
+          unionMaxY = unionMaxY and math.max(unionMaxY, raw.maxY) or raw.maxY
+        end
+        local frames = {}
+        if unionMinX then
+          for frame, raw in pairs(rawFrames) do
+            frames[frame] = {
+              x = unionMinX, y = frame * 32 + unionMinY,
+              w = unionMaxX - unionMinX + 1,
+              h = unionMaxY - unionMinY + 1,
+              runs = raw.runs,
+            }
+          end
+        end
+        cached = { image = image, iw = iw, ih = ih, frames = frames }
+        fittedHgssIcons[path] = cached
+      end
+    end
+    if not cached then return false end
+
+    local counter = animationCounter(state)
+    local maxHP = state.mon.stats and state.mon.stats.hp or 1
+    local hpPixels = math.floor((state.mon.hp or 0) * 48
+      / math.max(1, maxHP))
+    local speed = hpPixels >= 27 and 5 or hpPixels >= 10 and 16 or 32
+    local animate = setting("animate_icons", true)
+    local frame = animate and math.floor(counter / speed) % 2 or 0
+    local bounds = cached.frames[frame] or cached.frames[0]
+    if not bounds then return false end
+
+    local scale = math.min(target / bounds.w, target / bounds.h)
+    local drawW, drawH = bounds.w * scale, bounds.h * scale
+    local drawX = math.floor(x + (target - drawW) / 2 + 0.5)
+    local drawY = math.floor(y + (target - drawH) / 2 + 0.5)
+    local quad = love.graphics.newQuad(bounds.x, bounds.y,
+      bounds.w, bounds.h, cached.iw, cached.ih)
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(cached.image, quad, drawX, drawY, 0, scale, scale)
+    love.graphics.pop()
+    for _, run in ipairs(bounds.runs or {}) do
+      PaletteFX.markTrueColor(
+        drawX + (run.x - bounds.x) * scale,
+        drawY + (run.y - (bounds.y % 32)) * scale,
+        math.max(1, run.w * scale), math.max(1, scale))
+    end
+    return true
   end
 
   local function gray(value)
@@ -277,13 +397,15 @@ return function(mod, _, compatibility)
     local entry = (icons.bySpecies and icons.bySpecies[state.mon.species])
       or def.icon
     local trueColorIcon = false
+    local hgssIcon = false
     if type(entry) == "table" then
       local path = tostring(entry.image or ""):lower()
       local paletteAware = path:find("icons_original", 1, true) ~= nil
       trueColorIcon = not paletteAware
         or PartyMenu._uniqueMenuIconsTrueColorWrapped == true
+      hgssIcon = isHgssEntry(entry)
     end
-    if trueColorIcon then
+    if trueColorIcon and not hgssIcon then
       local colors = PaletteFX.effectiveColors(primaryPalette(state))
       local face = colors and colors[2]
       if face then
@@ -293,9 +415,13 @@ return function(mod, _, compatibility)
       end
     end
     gray(WHITE)
-    PartyMenu.drawIcon(state.game, state.mon, iconX, iconY,
-      setting("animate_icons", true), state.blink or 0)
-    if trueColorIcon then
+    local fitted = hgssIcon
+      and drawFittedHgssIcon(state, entry, iconX, iconY, 18)
+    if not fitted then
+      PartyMenu.drawIcon(state.game, state.mon, iconX, iconY,
+        setting("animate_icons", true), animationCounter(state))
+    end
+    if trueColorIcon and not hgssIcon then
       PaletteFX.markTrueColor(iconX - 1, iconY - 1, 18, 18)
     end
 
@@ -420,7 +546,7 @@ return function(mod, _, compatibility)
     elseif input:wasPressed("a") or input:wasPressed("b") then
       state.game.stack:pop()
     end
-    state.blink = (state.blink or 0) + (tonumber(dt) or 0)
+    state.blink = ((state.blink or 0) + 1) % 320
   end
 
   local function sgbPalettes(state)

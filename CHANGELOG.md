@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.15 - 2026-08-22
+
+- Consolidated all eight in-game settings behind one MODERN PARTY UI entry in
+  Options. ICON ANIMATION is now the second row, remains ON by default and can
+  be changed without opening the external mod manager.
+- Added compatibility with HGSS Visual Overhaul party icons. Modern Party UI
+  now measures both animation frames' visible pixels, fits their shared
+  envelope into the card rail and preserves the sheet's authored internal bob.
+- ICON ANIMATION now moves every visible party icon, making the enabled state
+  immediately apparent; turning it off holds every icon on its resting frame.
+- HGSS true-colour protection now follows opaque sprite-pixel runs, leaving
+  the surrounding type-coloured card untouched instead of restoring a darker
+  rectangular cell.
+- Corrected the animated HGSS icon geometry: visible creatures fill a 32px
+  rail on roomy cards and a 22px rail on compact cards, while remaining centred
+  and clear of names, gender markers, HP labels and meters.
+- Applied the same shared-frame visible-pixel fit to Kanto Ribbons profiles,
+  fixing the low sprite, preserving its animation and removing the large grey
+  restored rectangles.
+- Unified direct and Bag-opened party screens on portrait displays. Both now
+  use the same full-height, one-column phone layout with no resize or black void.
+
+## 0.3.14 - 2026-08-22
+
+- Fixed the party target picker jumping back to a short 144-pixel surface when
+  an item was used from Modern Bag UI on a portrait phone.
+- Made the party backdrop, cards, footer and colour regions fill the Bag's
+  inherited responsive surface until item targeting finishes.
+- Stacked the six target cards vertically on that portrait surface so names,
+  HP and EXP remain readable at phone width.
+- Kept battle and summary screen sizing unchanged.
+
 ## 0.3.13 - 2026-08-21
 
 - Fixed QoL Toggles' RENAME flow freezing when Gen1 Modern UI 0.9.2's Menu UI
