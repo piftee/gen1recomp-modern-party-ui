@@ -12,6 +12,11 @@ return function(mod)
         { "HEALTH", "health" }, { "BLUE", "blue" },
         { "MONO", "mono" },
       } },
+    -- Keep the animation switch on the first settings page. It used to be
+    -- the eighth row and was labelled PARTY ICON there, which made the
+    -- control both easy to miss and unclear about what it changed.
+    { key = "animate_icons", label = "ICON ANIMATION", type = "toggle",
+      default = true },
     { key = "hp_text", label = "HP DISPLAY", type = "choice",
       default = "bar", choices = {
         { "VALUES", "values" }, { "PERCENT", "percent" },
@@ -32,26 +37,13 @@ return function(mod)
       } },
     { key = "responsive", label = "WIDESCREEN", type = "toggle",
       default = true },
-    { key = "animate_icons", label = "ICON ANIM", type = "toggle",
-      default = true },
   }
   mod.options:define(optionSchema)
 
-  -- Mirror the same schema into the game's ordinary OPTIONS screen. The mod
-  -- manager remains the canonical options owner; these rows write the exact
-  -- same options.modOptions bucket and update the live loader so an open
-  -- party screen reflects a change immediately.
-  local mainLabels = {
-    card_color = "PARTY COLOR",
-    hp_text = "PARTY HP TEXT",
-    exp_text = "PARTY EXP TEXT",
-    exp_strip = "PARTY EXP BAR",
-    empty_slots = "PARTY SLOTS",
-    pattern = "PARTY BG",
-    responsive = "PARTY WIDE",
-    animate_icons = "PARTY ICON",
-  }
-
+  -- Expose the schema through one entry in the game's ordinary OPTIONS
+  -- screen. Activating it opens a dedicated Options-style page containing
+  -- every Modern Party UI setting, rather than appending eight loose rows to
+  -- an already-long main list. The mod manager remains the canonical owner.
   local function setOption(game, key, value)
     local options = game and game.save and game.save.options
     if options then
@@ -71,14 +63,13 @@ return function(mod)
     end
   end
 
-  mod.hooks:wrap("ui.options.rows", function(next, game, rows)
-    local out = next(game, rows)
-    if type(out) ~= "table" then return out end
+  local function optionRows()
+    local out = {}
     for _, sourceRow in ipairs(optionSchema) do
       local row = sourceRow
       local rendered = {
         id = "modern_party_ui_" .. row.key,
-        label = mainLabels[row.key] or row.label or row.key,
+        label = row.label or row.key,
       }
       if row.type == "toggle" then
         rendered.value = function()
@@ -112,6 +103,27 @@ return function(mod)
       out[#out + 1] = rendered
     end
     return out
+  end
+
+  mod.hooks:wrap("ui.options.rows", function(next, game, rows)
+    local out = next(game, rows)
+    if type(out) ~= "table" then return out end
+    out[#out + 1] = {
+      id = "modern_party_ui",
+      label = "MODERN PARTY UI",
+      value = function() return "OPEN" end,
+      activate = function(g)
+        local OptionsMenu = require("src.ui.OptionsMenu")
+        local page = OptionsMenu.new(g)
+        -- OptionsMenu.new invokes this hook while constructing itself. Its
+        -- resulting main rows are intentionally replaced with the dedicated
+        -- schema page before the screen is shown.
+        page.rows = optionRows()
+        page.index, page.scroll = 1, 0
+        g.stack:push(page)
+      end,
+    }
+    return out
   end)
 
   local genderMod = mod.find("gender_mod")
@@ -133,6 +145,7 @@ return function(mod)
     crystal251Summary = crystal251 and crystal251.exports
       and crystal251.exports.crystalSummary or nil,
     uniqueMenuIcons = mod.find("unique_menu_icons") ~= nil,
+    hgssSprites = mod.find("HGSS_SPRITES") ~= nil,
   }
 
   local function loadScreen(filename, label)
@@ -374,6 +387,9 @@ return function(mod)
   end
   if compatibility.uniqueMenuIcons then
     adapters[#adapters + 1] = "Unique Menu Icons"
+  end
+  if compatibility.hgssSprites then
+    adapters[#adapters + 1] = "HGSS Visual Overhaul"
   end
   local suffix = #adapters > 0 and (" with " .. table.concat(adapters, ", "))
     or ""

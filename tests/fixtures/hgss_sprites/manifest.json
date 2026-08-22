@@ -1,0 +1,10 @@
+{
+  "id": "HGSS_SPRITES",
+  "name": "HGSS Visual Overhaul Compatibility Fixture",
+  "version": "1.0.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "overhaul",
+  "priority": 150,
+  "permissions": ["engine_internals"]
+}

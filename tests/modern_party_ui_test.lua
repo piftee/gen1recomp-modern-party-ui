@@ -2,6 +2,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local T = require("tests.modkit")
+local Assets = require("src.render.Assets")
 local PartyMenu = require("src.ui.PartyMenu")
 local Font = require("src.render.Font")
 local PaletteFX = require("src.render.PaletteFX")
@@ -75,33 +76,50 @@ T.eq(#schema, 8, "all eight presentation settings are registered")
 T.eq(run.loader.modOptions.modern_party_ui, nil,
   "defaults require no persisted option bucket")
 
+do
 local optionGame = {
   data = run.data,
   save = { options = {} },
   mods = run.loader,
+  stack = { push = function(self, page) self.page = page end },
 }
 local mainOptionRows = Runtime.call("ui.options.rows",
   function(_, rows) return rows end, optionGame, { { id = "text_speed" } })
-T.eq(#mainOptionRows, 9,
-  "all eight mod settings are mirrored into the main Options menu")
-T.eq(mainOptionRows[2].id, "modern_party_ui_card_color",
-  "the party settings follow the game's own option rows")
-T.eq(mainOptionRows[2].value(optionGame), "TYPE",
-  "main Options reads the same default as the mod manager")
-mainOptionRows[2].step(optionGame, 1)
+T.eq(#mainOptionRows, 2,
+  "one Modern Party UI entry is added to the main Options menu")
+T.eq(mainOptionRows[2].id, "modern_party_ui",
+  "the consolidated party settings entry follows the game's own rows")
+T.eq(mainOptionRows[2].value(optionGame), "OPEN",
+  "the consolidated entry clearly indicates that it opens a page")
+mainOptionRows[2].activate(optionGame)
+local partyOptionRows = optionGame.stack.page and optionGame.stack.page.rows or {}
+T.eq(#partyOptionRows, 8,
+  "the dedicated Modern Party UI page contains every presentation setting")
+T.eq(partyOptionRows[1].id, "modern_party_ui_card_color",
+  "the dedicated page starts with party colour")
+T.eq(partyOptionRows[1].value(optionGame), "TYPE",
+  "the dedicated page reads the same default as the mod manager")
+partyOptionRows[1].step(optionGame, 1)
 T.eq(run.loader.modOptions.modern_party_ui.card_color, "species_palette",
-  "main Options exposes the original species palette after the type default")
+  "the dedicated page exposes the species palette after the type default")
 T.eq(optionGame.save.options.modOptions.modern_party_ui.card_color,
   "species_palette",
-  "main Options persists the explicit species-palette choice")
-T.eq(mainOptionRows[4].id, "modern_party_ui_exp_text",
-  "the EXP display has its own main Options row")
-T.eq(mainOptionRows[4].value(optionGame), "PERCENT",
+  "the dedicated page persists the explicit species-palette choice")
+T.eq(partyOptionRows[2].id, "modern_party_ui_animate_icons",
+  "icon animation is visible on the first dedicated settings page")
+T.eq(partyOptionRows[2].label, "ICON ANIMATION",
+  "the animation control has an explicit player-facing label")
+T.eq(partyOptionRows[2].value(optionGame), "ON",
+  "icon animation is enabled by default")
+T.eq(partyOptionRows[4].id, "modern_party_ui_exp_text",
+  "the EXP display has its own row on the dedicated page")
+T.eq(partyOptionRows[4].value(optionGame), "PERCENT",
   "the EXP display defaults to a useful percentage")
-mainOptionRows[4].step(optionGame, -1)
+partyOptionRows[4].step(optionGame, -1)
 T.eq(run.loader.modOptions.modern_party_ui.exp_text, "values",
   "the EXP display cycles independently through its configured modes")
 run.loader.modOptions.modern_party_ui = nil
+end
 
 local record = run.data.screens and run.data.screens.PartyMenu
 T.check(type(record) == "table" and type(record.new) == "function",
@@ -160,11 +178,67 @@ local realPixelDimensions = graphics.getPixelDimensions
 graphics.getPixelDimensions = function() return 1280, 720 end
 T.eq(select(1, screen:uiSize()), 256,
   "a 16:9 window exposes a 256x144 responsive UI surface")
+T.eq(select(2, screen:uiSize()), 144,
+  "a 16:9 window keeps the reference-height party surface")
 run.loader.modOptions.modern_party_ui = { responsive = false }
 T.eq(select(1, screen:uiSize()), 160,
   "the WIDESCREEN setting can restore the classic width")
+T.eq(select(2, screen:uiSize()), 144,
+  "disabling WIDESCREEN also restores the classic height")
 run.loader.modOptions.modern_party_ui = nil
 graphics.getPixelDimensions = realPixelDimensions
+
+-- Direct menu entry and Bag item targeting resolve to one portrait surface.
+-- The parent stays on the stack while PartyMenu owns input, matching the
+-- native Bag -> USE -> choose a POKéMON flow.
+do
+  graphics.getPixelDimensions = function() return 998, 1980 end
+  local directW, directH = screen:uiSize()
+  T.eq(directW, 160,
+    "a directly opened party uses the phone-width portrait surface")
+  T.eq(directH, 330,
+    "a directly opened party uses the phone's available portrait height")
+  local portraitBag = {
+    modernBagUI = true,
+    uiSize = function() return directW, directH end,
+  }
+  stack:push(portraitBag)
+  stack:push(screen)
+  local targetW, targetH = screen:uiSize()
+  T.eq(targetW, 160,
+    "a Bag-opened party target keeps the Bag's portrait width")
+  T.eq(targetH, 330,
+    "a Bag-opened party target keeps the Bag's full portrait height")
+  game.renderer = { uiSize = function() return targetW, targetH end }
+  local targetLayout = screen:modernPartyLayoutInfo()
+  T.eq(targetLayout.height, 330,
+    "the party target layout fills the inherited portrait surface")
+  T.eq(targetLayout.columns, 1,
+    "the portrait party target stacks full-width readable cards")
+  T.eq(targetLayout.rows, 6,
+    "the portrait target uses the Bag's height for all six party slots")
+  T.eq(targetLayout.footerY, 322,
+    "the party target footer stays at the bottom of the inherited surface")
+  local targetZones = screen:sgbPalettes(game) or {}
+  T.eq(targetZones[1] and targetZones[1].h, 330,
+    "the party target palette covers the inherited portrait surface")
+  T.eq(screen.modernPartyParentSurface, "modern_bag_ui",
+    "the active parent surface is identified for compatibility diagnostics")
+  stack:pop()
+  stack:pop()
+  game.renderer = nil
+  local reopenedW, reopenedH = screen:uiSize()
+  T.eq(reopenedW, targetW,
+    "menu and Bag entry use the same portrait width")
+  T.eq(reopenedH, targetH,
+    "menu and Bag entry use the same portrait height")
+  local directLayout = screen:modernPartyLayoutInfo()
+  T.eq(directLayout.columns, targetLayout.columns,
+    "menu and Bag entry use the same portrait card columns")
+  T.eq(directLayout.rows, targetLayout.rows,
+    "menu and Bag entry use the same portrait card rows")
+  graphics.getPixelDimensions = realPixelDimensions
+end
 
 game.renderer = { uiSize = function() return 256, 144 end }
 local wideZones = screen:sgbPalettes(game) or {}
@@ -447,8 +521,10 @@ T.eq(select(1, summary:uiSize()), 320,
 graphics.getPixelDimensions = function() return 360, 800 end
 T.eq(select(1, summary:uiSize()), 180,
   "a narrow portrait display uses the width-fitting integer scale")
-T.eq(select(1, screen:uiSize()), 180,
-  "the party roster uses the same portrait-width calculation")
+T.eq(select(1, screen:uiSize()), 160,
+  "the party roster matches Modern Bag UI's readable portrait width")
+T.eq(select(2, screen:uiSize()), 400,
+  "the party roster fills the available tall-phone surface")
 graphics.getPixelDimensions = function() return 1280, 720 end
 T.eq(select(1, summary:uiSize()), 256,
   "a 16:9 desktop display matches the responsive party surface")
@@ -598,6 +674,144 @@ local unrelatedNaming = { screenId = "NamingScreen", game = renameGame }
 T.eq(modernUi.shouldSuppress(unrelatedNaming), true,
   "unrelated naming screens remain available to Gen1 Modern UI")
 renameRun.release()
+end
+
+-- HGSS Visual Overhaul 1.0.0 publishes padded 32x32 true-colour party frames.
+-- Fit the visible alpha bounds into the complete card rail and protect only
+-- those visible pixels, rather than scaling the transparent source canvas.
+do
+local hgssData = T.fixtures.fresh()
+hgssData.icons = { icons = {}, byDex = {}, bySpecies = {} }
+for _, species in ipairs({ "FIXMON_A", "FIXMON_B", "FIXMON_C" }) do
+  hgssData.icons.bySpecies[species] = {
+    image = "mods/HGSS_SPRITES/assets/icons/"
+      .. species:lower() .. ".png",
+    frames = 2,
+    trueColor = true,
+  }
+end
+hgssData.palettes = data.palettes
+Font.load(hgssData)
+local drawIconBeforeHgss = PartyMenu.drawIcon
+local hgssRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/hgss_sprites",
+  "mods/modern_party_ui",
+}, { data = hgssData, dev = true })
+T.eq(#hgssRun.errors, 0, "loads beside HGSS Visual Overhaul 1.0.0")
+local hgssGame = {
+  data = hgssRun.data,
+  save = { party = party, inventory = {}, options = {} },
+  stack = { states = {} },
+  input = { wasPressed = function() return false end },
+  -- Match the two 160px-wide columns in the reported desktop layout.
+  renderer = { uiSize = function() return 320, 240 end },
+}
+local hgssScreen = hgssRun.data.screens.PartyMenu.new(hgssGame, {})
+local hgssMarks, fittedDraws, scaledFills = {}, {}, {}
+local hgssRealMark = PaletteFX.markTrueColor
+local hgssRealRectangle = graphics.rectangle
+local hgssRealDraw = graphics.draw
+local hgssRealImageData = Assets.imageData
+local hgssRealImage = Assets.image
+local fakeHgssImage = {}
+local fakeHgssData = {}
+function fakeHgssData:getDimensions() return 32, 64 end
+function fakeHgssData:getPixel(px, py)
+  local frameY = py % 32
+  local opaque = py < 32
+    and px >= 8 and px <= 23 and frameY >= 6 and frameY <= 25
+    or py >= 32
+      and px >= 8 and px <= 23 and frameY >= 7 and frameY <= 26
+  return 1, 1, 1, opaque and 1 or 0
+end
+Assets.imageData = function(path)
+  if tostring(path):lower():find("hgss", 1, true) then
+    return fakeHgssData
+  end
+  return hgssRealImageData(path)
+end
+Assets.image = function(path)
+  if tostring(path):lower():find("hgss", 1, true) then
+    return fakeHgssImage
+  end
+  return hgssRealImage(path)
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  hgssMarks[#hgssMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+graphics.draw = function(image, quad, x, y, rotation, sx, sy, ...)
+  if image == fakeHgssImage then
+    fittedDraws[#fittedDraws + 1] = {
+      quad = quad, x = x, y = y, sx = sx or 1, sy = sy or sx or 1,
+    }
+  end
+  return hgssRealDraw(image, quad, x, y, rotation, sx, sy, ...)
+end
+graphics.rectangle = function(mode, x, y, w, h)
+  if mode == "fill" and w == 32 and h == 32 then
+    local r, g, b = graphics.getColor()
+    scaledFills[#scaledFills + 1] = { r = r, g = g, b = b }
+  end
+  return hgssRealRectangle(mode, x, y, w, h)
+end
+local hgssOK, hgssErr = pcall(hgssScreen.draw, hgssScreen)
+PaletteFX.markTrueColor = hgssRealMark
+graphics.rectangle = hgssRealRectangle
+T.check(hgssOK,
+  "the HGSS party icon renderer draws headlessly: " .. tostring(hgssErr))
+T.eq(#fittedDraws, #party,
+  "roomy cards alpha-fit every HGSS creature independently")
+local firstFitted = fittedDraws[1]
+T.check(firstFitted
+    and math.max(firstFitted.quad.w * firstFitted.sx,
+      firstFitted.quad.h * firstFitted.sy) >= 31.5,
+  "the visible HGSS creature fills the native 32px party rail")
+T.check(#hgssMarks > #party,
+  "HGSS true-colour protection follows fitted opaque pixel rows")
+T.eq(#scaledFills, 0,
+  "fitted HGSS icons do not restore rectangular card backings")
+
+local hgssCalls = hgssRun.loader.exports.HGSS_SPRITES.calls
+T.eq(#hgssCalls, 0,
+  "the fitted path bypasses HGSS's padded full-frame renderer")
+
+-- Frame 48 is in frame two for every healthy/yellow/red HGSS cadence.
+hgssScreen.blink = 48
+local beforeAnimated = #fittedDraws
+local animateOK, animateErr = pcall(hgssScreen.draw, hgssScreen)
+T.check(animateOK,
+  "the animated HGSS frame draws headlessly: " .. tostring(animateErr))
+for i = beforeAnimated + 1, beforeAnimated + #party do
+  local resting = fittedDraws[i - beforeAnimated]
+  local moving = fittedDraws[i]
+  T.check(moving and moving.quad.y >= 32,
+    "the fitted HGSS renderer advances card " .. i .. " to frame two")
+  T.check(resting and moving
+      and resting.quad.x == moving.quad.x
+      and resting.quad.y % 32 == moving.quad.y % 32
+      and resting.quad.w == moving.quad.w
+      and resting.quad.h == moving.quad.h
+      and resting.x == moving.x and resting.y == moving.y
+      and resting.sx == moving.sx and resting.sy == moving.sy,
+    "card " .. i .. " keeps a shared crop so the authored bob remains visible")
+end
+
+hgssRun.loader.modOptions.modern_party_ui = { animate_icons = false }
+hgssScreen.blink = 10
+local beforeStill = #fittedDraws
+local stillOK, stillErr = pcall(hgssScreen.draw, hgssScreen)
+T.check(stillOK,
+  "the disabled animation frame draws headlessly: " .. tostring(stillErr))
+for i = beforeStill + 1, beforeStill + #party do
+  T.check(fittedDraws[i] and fittedDraws[i].quad.y < 32,
+    "ICON ANIMATION OFF holds fitted HGSS card " .. i
+      .. " on its resting frame")
+end
+graphics.draw = hgssRealDraw
+Assets.imageData = hgssRealImageData
+Assets.image = hgssRealImage
+PartyMenu.drawIcon = drawIconBeforeHgss
+hgssRun.release()
 end
 
 -- QoL Toggles PARTY SCROLL changes the live SummaryMenu's mon and native
@@ -1051,6 +1265,7 @@ PaletteFX.setMode("gbc")
 local ribbonRun = T.sdk.loadMods({
   "mods/modern_party_ui/tests/fixtures/gen1_modern_ui",
   "mods/modern_party_ui/tests/fixtures/kanto_ribbons",
+  "mods/modern_party_ui/tests/fixtures/hgss_sprites",
   "mods/modern_party_ui",
 }, { data = ribbonData, dev = true })
 T.eq(#ribbonRun.errors, 0,
@@ -1137,10 +1352,15 @@ Font.draw = realFontDraw
 T.check(modernRibbonOK,
   "the modern ribbon cards draw: " .. tostring(modernRibbonErr))
 local ribbonTrueColor = PaletteFX.trueColorRects("ui")
-T.eq(#ribbonTrueColor, 1,
+T.check(#ribbonTrueColor >= 1,
   "the ribbon screen replaces inherited claims with its profile icon")
-T.check(not (ribbonTrueColor[1].x == 8
-    and ribbonTrueColor[1].w == 16 and ribbonTrueColor[1].h == 16),
+local leakedRibbonClaim = false
+for _, rect in ipairs(ribbonTrueColor) do
+  if rect.x == 8 and rect.w == 16 and rect.h == 16 then
+    leakedRibbonClaim = true
+  end
+end
+T.check(not leakedRibbonClaim,
   "party-icon rectangles cannot leak onto the ribbon collection")
 PaletteFX.clearTrueColor()
 local sawRibbonTitle, sawStarter, sawRibbonDescription, sawScrollHint
@@ -1179,6 +1399,92 @@ modernRibbonScreen:update(0)
 input.pressed.b = nil
 T.check(stack:top() ~= modernRibbonScreen,
   "the restyled ribbon screen retains Kanto Ribbons back behavior")
+
+-- HGSS uses a padded two-frame canvas. The ribbon profile must crop, enlarge,
+-- centre, and animate its visible creature without restoring a grey rectangle.
+;(function()
+ribbonRun.data.icons.bySpecies.FIXMON_A = {
+  image = "mods/HGSS_SPRITES/assets/icons/fixmon_a.png",
+  frames = 2,
+  trueColor = true,
+}
+local fakeRibbonImage, fakeRibbonData = {}, {}
+function fakeRibbonData:getDimensions() return 32, 64 end
+function fakeRibbonData:getPixel(px, py)
+  local frameY = py % 32
+  local opaque = py < 32
+    and px >= 8 and px <= 23 and frameY >= 6 and frameY <= 25
+    or py >= 32
+      and px >= 8 and px <= 23 and frameY >= 7 and frameY <= 26
+  return 1, 1, 1, opaque and 1 or 0
+end
+local oldRibbonImageData, oldRibbonImage = Assets.imageData, Assets.image
+local oldRibbonDraw = graphics.draw
+local ribbonSpriteDraws, ribbonMarks = {}, {}
+local oldRibbonMark = PaletteFX.markTrueColor
+Assets.imageData = function(path)
+  if tostring(path):lower():find("hgss", 1, true) then
+    return fakeRibbonData
+  end
+  return oldRibbonImageData(path)
+end
+Assets.image = function(path)
+  if tostring(path):lower():find("hgss", 1, true) then
+    return fakeRibbonImage
+  end
+  return oldRibbonImage(path)
+end
+graphics.draw = function(image, quad, x, y, rotation, sx, sy, ...)
+  if image == fakeRibbonImage then
+    ribbonSpriteDraws[#ribbonSpriteDraws + 1] = {
+      quad = quad, x = x, y = y, sx = sx or 1, sy = sy or sx or 1,
+    }
+  end
+  return oldRibbonDraw(image, quad, x, y, rotation, sx, sy, ...)
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  ribbonMarks[#ribbonMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+local hgssRibbon = ribbonRun.data.screens.KantoRibbonsDetail.new(
+  ribbonGame, ribbonMon)
+hgssRibbon.blink = 0
+local hgssRibbonRestOK, hgssRibbonRestErr = pcall(
+  hgssRibbon.draw, hgssRibbon)
+local restingRibbonSprite = ribbonSpriteDraws[1]
+hgssRibbon.blink = 48
+local hgssRibbonOK, hgssRibbonErr = pcall(hgssRibbon.draw, hgssRibbon)
+Assets.imageData, Assets.image = oldRibbonImageData, oldRibbonImage
+graphics.draw = oldRibbonDraw
+PaletteFX.markTrueColor = oldRibbonMark
+T.check(hgssRibbonOK,
+  "the fitted HGSS ribbon profile draws: " .. tostring(hgssRibbonErr))
+T.check(hgssRibbonRestOK,
+  "the resting HGSS ribbon profile draws: " .. tostring(hgssRibbonRestErr))
+local ribbonSprite = ribbonSpriteDraws[2]
+local ribbonSpriteW = ribbonSprite and ribbonSprite.quad.w * ribbonSprite.sx or 0
+local ribbonSpriteH = ribbonSprite and ribbonSprite.quad.h * ribbonSprite.sy or 0
+T.check(ribbonSprite and ribbonSprite.quad.y >= 32,
+  "the ribbon profile advances to HGSS frame two")
+T.check(restingRibbonSprite and ribbonSprite
+    and restingRibbonSprite.quad.x == ribbonSprite.quad.x
+    and restingRibbonSprite.quad.y % 32 == ribbonSprite.quad.y % 32
+    and restingRibbonSprite.quad.w == ribbonSprite.quad.w
+    and restingRibbonSprite.quad.h == ribbonSprite.quad.h
+    and restingRibbonSprite.x == ribbonSprite.x
+    and restingRibbonSprite.y == ribbonSprite.y
+    and restingRibbonSprite.sx == ribbonSprite.sx
+    and restingRibbonSprite.sy == ribbonSprite.sy,
+  "the ribbon profile preserves HGSS's internal one-pixel animation")
+T.check(math.max(ribbonSpriteW, ribbonSpriteH) >= 17.5
+    and math.max(ribbonSpriteW, ribbonSpriteH) <= 18.1,
+  "the visible HGSS ribbon sprite fills its 18px profile rail")
+T.check(ribbonSprite.x >= 8 and ribbonSprite.y >= 21
+    and ribbonSprite.x + ribbonSpriteW <= 26.1
+    and ribbonSprite.y + ribbonSpriteH <= 39.1,
+  "the fitted HGSS ribbon sprite remains centred inside its profile rail")
+T.check(#ribbonMarks > 1,
+  "the HGSS ribbon profile protects opaque rows instead of a grey rectangle")
+end)()
 
 ribbonRun.release()
 
