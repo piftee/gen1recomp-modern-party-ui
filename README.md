@@ -97,8 +97,8 @@ palette changes supplied by compatible sprite mods.
 
 ## Other sprite mods
 
-The mod never loads a Pokémon icon path itself. Every card calls the engine's
-shared party-icon renderer, so these all continue to work:
+Every ordinary card calls the engine's shared party-icon renderer, so these
+all continue to work:
 
 - `icons.bySpecies` registrations, including newly added species
 - a Pokémon record's `icon` override
@@ -115,6 +115,13 @@ backgrounds intact when they overlap a colour icon. Third-party colour claims
 made inside the shared icon renderer follow the same popup-aware path. This
 keeps the taller FOLLOW and utility menus supplied by **Wilds of Kanto 2.1.7**
 free of unshaded grey blocks.
+
+**Wilds of Kanto** is integrated through its exported follower-sprite resolver
+as well as the shared renderer. This preserves its configured art and authored
+idle/walk frames even when another late-loading mod replaces
+`PartyMenu.drawIcon`; if Wilds cannot resolve or load a sheet, the normal icon
+chain remains the fallback. Only opaque Wilds pixels receive true-colour
+protection, so its transparent 16x16 canvas cannot become a square.
 
 The **Species** card-colour option continues to use the engine's live Pokémon
 palette lookup. The default **Type** option changes only the card surface; icon
@@ -155,11 +162,13 @@ mods continue to compose through the shared engine helpers. An unknown mod
 whose entire behavior exists only inside its own replacement screen still
 needs a dedicated adapter before that behavior can appear in the modern UI.
 
-The summary renderer uses the live sprite already resolved by Gen1Recomp,
-including `pokemon.sprite` hooks, content-mod sprite paths and the frame swaps
-performed by Crystal Animated Sprites with Shiny Visuals 1.5. Authored
-true-colour sprites are protected from palette recolouring at their live
-responsive position.
+The summary renderer deliberately resolves the same `battle` front-sprite
+context used in combat. This keeps the stats profile aligned with what the
+player actually sees when the Pokémon enters battle, including selectable
+`pokemon.sprite` hooks and content-mod sprite paths. Frame swaps performed by
+Crystal Animated Sprites with Shiny Visuals 1.5 remain live, and authored
+true-colour sprites are protected from palette recolouring at their responsive
+position.
 
 DramaticShape 1.8.2 shinies are supported through that mod's public
 `exports.lib` interface. Modern Party UI asks DramaticShape whether the
@@ -217,6 +226,13 @@ first. Modern
 Party UI then takes presentation ownership of only its own screens while
 continuing to use their live controller methods, exports, sprite frames and
 icon records.
+
+Party-card colour preservation follows each replacement icon's opaque pixels,
+not its transparent source canvas. This keeps Unique Menu Icons and similar
+packs free of square backplates whether Gender Mod is enabled or not. If a
+third-party icon path cannot be decoded on the current platform, the party card
+falls back to Gen1Recomp's normal species/dex icon rather than drawing an empty
+placeholder square.
 
 The reported Gen1Recomp 0.1.75 stack on Windows 10 was also audited. Dramatic
 Shape Voxel, Battle EXP Bar, FireRed/LeafGreen Music, cry replacements and

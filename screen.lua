@@ -68,7 +68,19 @@ return function(mod, genderExports, compatibility)
 
   local inkShader -- false when unavailable
   local fittedHgssIcons = {}
+  local iconAlphaMasks = {}
+  local wildsIconDefs = {}
+  local wildsIconAlphaMasks = {}
   local cardPalette -- assigned after the draw helpers
+
+  if Assets.register then
+    Assets.register(function()
+      fittedHgssIcons = {}
+      iconAlphaMasks = {}
+      wildsIconDefs = {}
+      wildsIconAlphaMasks = {}
+    end)
+  end
 
   local function cardFaceColor(menu, mon, selected)
     if type(cardPalette) ~= "function" then return nil end
@@ -600,31 +612,269 @@ return function(mod, genderExports, compatibility)
   -- turn the overlapping menu pixels back into unshaded grey blocks. All
   -- icon claims are published together after the popup's real bounds are
   -- known, through markTrueColorOutside below.
+  local function appendOpaqueRegions(regions, x, y, iconScale, opaqueRuns)
+    local scale = tonumber(iconScale) or 1
+    for _, run in ipairs(opaqueRuns or {}) do
+      regions[#regions + 1] = {
+        x = x + run.x * scale, y = y + run.y * scale,
+        w = math.max(1, run.w * scale), h = math.max(1, scale),
+      }
+    end
+  end
+
+  local function isShinyMon(mon)
+    if not mon then return false end
+    if mon.shiny == true or mon.isShiny == true then return true end
+    if not mon.dvs then return false end
+    local okModule, Stats = pcall(require, "src.pokemon.Stats")
+    if not okModule or type(Stats) ~= "table"
+        or type(Stats.isShiny) ~= "function" then
+      return false
+    end
+    local okShiny, shiny = pcall(Stats.isShiny, mon.dvs)
+    return okShiny and shiny == true
+  end
+
+  -- Wilds of Kanto publishes follower-style sprite sheets through a stable
+  -- resolver. Consume that API directly instead of depending on its global
+  -- PartyMenu.drawIcon wrapper remaining the last wrapper installed. Several
+  -- legitimate mod orders replace that global function later, which used to
+  -- leave every modern card empty even though Wilds still had valid artwork.
+  local function wildsIconDef(menu, mon)
+    local exports = compatibility.wildsOfKantoExports
+    local resolve = exports and exports.resolveFollowerSprite
+    if type(resolve) ~= "function" then return nil end
+
+    local shiny = isShinyMon(mon)
+    local key = table.concat({
+      tostring(mon.species or ""), shiny and "s" or "n",
+      tostring(mon.form or ""),
+    }, "|")
+    local cached = wildsIconDefs[key]
+    if cached ~= nil then return cached or nil end
+
+    local ok, def = pcall(resolve, {
+      species = mon.species,
+      shiny = shiny,
+      form = mon.form,
+      surface = "land",
+      role = "party_menu",
+      game = menu.game,
+    })
+    if not ok or type(def) ~= "table" or type(def.image) ~= "string"
+        or def.image == "" then
+      wildsIconDefs[key] = false
+      return nil
+    end
+    wildsIconDefs[key] = def
+    return def
+  end
+
+  local function wildsOpaqueRuns(path, frameX, frameY, frameW, frameH)
+    local cached = wildsIconAlphaMasks[path]
+    if cached == nil then
+      local ok, data, iw, ih = pcall(function()
+        local decoded = Assets.imageData(path)
+        local width, height = decoded:getDimensions()
+        return decoded, width, height
+      end)
+      if not ok or not data or not iw or not ih then
+        wildsIconAlphaMasks[path] = false
+        return nil
+      end
+      cached = { data = data, iw = iw, ih = ih, frames = {} }
+      wildsIconAlphaMasks[path] = cached
+    elseif cached == false then
+      return nil
+    end
+
+    frameX = math.max(0, math.floor(tonumber(frameX) or 0))
+    frameY = math.max(0, math.floor(tonumber(frameY) or 0))
+    frameW = math.min(math.floor(tonumber(frameW) or cached.iw),
+      cached.iw - frameX)
+    frameH = math.min(math.floor(tonumber(frameH) or cached.ih),
+      cached.ih - frameY)
+    if frameW <= 0 or frameH <= 0 then return nil end
+    local key = table.concat({ frameX, frameY, frameW, frameH }, ":")
+    if cached.frames[key] ~= nil then
+      return cached.frames[key] or nil
+    end
+
+    local ok, runs = pcall(function()
+      local result = {}
+      for py = 0, frameH - 1 do
+        local start
+        for px = 0, frameW - 1 do
+          local _, _, _, alpha = cached.data:getPixel(frameX + px, frameY + py)
+          local opaque = alpha == nil or alpha > 0.01
+          if opaque and start == nil then start = px end
+          if start ~= nil and (not opaque or px == frameW - 1) then
+            local finish = opaque and px or px - 1
+            result[#result + 1] = {
+              x = start, y = py, w = finish - start + 1,
+            }
+            start = nil
+          end
+        end
+      end
+      return result
+    end)
+    if not ok or #runs == 0 then
+      cached.frames[key] = false
+      return nil
+    end
+    cached.frames[key] = runs
+    return runs
+  end
+
+  local function drawWildsIcon(menu, mon, x, y, selected, counter, regions)
+    local def = wildsIconDef(menu, mon)
+    if not def then return false end
+    local okImage, image = pcall(Assets.image, def.image)
+    if not okImage or not image then return false end
+
+    local iw, ih
+    if type(image.getDimensions) == "function" then
+      iw, ih = image:getDimensions()
+    elseif type(image.getWidth) == "function"
+        and type(image.getHeight) == "function" then
+      iw, ih = image:getWidth(), image:getHeight()
+    end
+    iw, ih = tonumber(iw), tonumber(ih)
+    if not iw or not ih or iw <= 0 or ih <= 0
+        or not love.graphics.newQuad then return false end
+
+    local frames = math.max(1, math.floor(tonumber(def.frames) or 1))
+    local frameW = math.min(iw,
+      math.max(1, math.floor(tonumber(def.frameWidth) or iw)))
+    local defaultFrameH = frames > 1 and math.floor(ih / frames) or ih
+    local frameH = math.min(ih,
+      math.max(1, math.floor(tonumber(def.frameHeight) or defaultFrameH)))
+    local frame = 0
+    if selected and frames >= 4 then
+      local maxHP = mon.stats and tonumber(mon.stats.hp) or 1
+      local hpPixels = math.floor((tonumber(mon.hp) or 0) * 48
+        / math.max(1, maxHP))
+      local speed = hpPixels >= 27 and 5 or hpPixels >= 10 and 16 or 32
+      if math.floor((tonumber(counter) or 0) / speed) % 2 == 1 then
+        frame = 3
+      end
+    end
+    frame = math.min(frames - 1, frame)
+    local frameY = math.min(math.max(0, ih - frameH), frame * frameH)
+    local quad = love.graphics.newQuad(0, frameY, frameW, frameH, iw, ih)
+    local scale = math.min(1, 16 / frameW, 16 / frameH)
+    local drawW, drawH = frameW * scale, frameH * scale
+    local drawX = math.floor(x + (16 - drawW) / 2 + 0.5)
+    local drawY = math.floor(y + (16 - drawH) / 2 + 0.5)
+
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(image, quad, drawX, drawY, 0, scale, scale)
+    love.graphics.pop()
+
+    if def.trueColor ~= false then
+      local runs = wildsOpaqueRuns(def.image, 0, frameY, frameW, frameH)
+      appendOpaqueRegions(regions, drawX, drawY, scale, runs)
+    end
+    return true
+  end
+
+  -- Read the same animation frame PartyMenu.drawIcon will use, but retain
+  -- only its opaque pixel runs. PaletteFX can then restore the authored
+  -- colours without restoring the transparent canvas around them as a
+  -- white/grey square. A failed decode deliberately returns nil: the icon
+  -- may still draw through a companion renderer, but no unsafe rectangular
+  -- true-colour claim will be published for it.
+  local function iconOpaqueRuns(menu, mon, entry, selected, counter)
+    if type(entry) ~= "table" or type(entry.image) ~= "string" then
+      return nil
+    end
+    local path = Sprites.iconPath(menu.game.data, mon, entry.image, {})
+    if type(path) ~= "string" then return nil end
+
+    local cached = iconAlphaMasks[path]
+    if cached == nil then
+      local ok, data, iw, ih = pcall(function()
+        local decoded = Assets.imageData(path)
+        local width, height = decoded:getDimensions()
+        return decoded, width, height
+      end)
+      if not ok or not data or not iw or not ih then
+        iconAlphaMasks[path] = false
+        return nil
+      end
+      cached = { data = data, iw = iw, ih = ih, frames = {} }
+      iconAlphaMasks[path] = cached
+    elseif cached == false then
+      return nil
+    end
+
+    local alt = false
+    if selected then
+      local maxHP = mon.stats and mon.stats.hp or 1
+      local hpPixels = math.floor((mon.hp or 0) * 48 / math.max(1, maxHP))
+      local speed = hpPixels >= 27 and 5 or hpPixels >= 10 and 16 or 32
+      alt = math.floor((counter or 0) / speed) % 2 == 1
+    end
+    local frame = cached.ih > 16
+      and PartyMenu.frameFor(nil, alt, cached.ih) or 0
+    if cached.frames[frame] ~= nil then
+      return cached.frames[frame] or nil
+    end
+
+    local ok, runs = pcall(function()
+      local result = {}
+      local frameY = cached.ih > 16 and frame * 16 or 0
+      local sourceW = cached.ih > 16
+        and math.min(16, cached.iw) or cached.iw
+      local sourceH = math.min(16, cached.ih - frameY)
+      if sourceW <= 0 or sourceH <= 0 then return result end
+      for py = 0, sourceH - 1 do
+        local start
+        for px = 0, sourceW - 1 do
+          local _, _, _, alpha = cached.data:getPixel(px, frameY + py)
+          local opaque = (alpha == nil or alpha > 0.01)
+          if opaque and start == nil then start = px end
+          if start ~= nil and (not opaque or px == sourceW - 1) then
+            local finish = opaque and px or px - 1
+            result[#result + 1] = {
+              x = start, y = py, w = finish - start + 1,
+            }
+            start = nil
+          end
+        end
+      end
+      return result
+    end)
+    if not ok or #runs == 0 then
+      cached.frames[frame] = false
+      return nil
+    end
+    cached.frames[frame] = runs
+    return runs
+  end
+
   local function drawIconCollectingTrueColor(menu, mon, x, y, selected,
-      counter, regions, background, iconScale, opaqueRuns)
+      counter, regions, iconScale, opaqueRuns, suppressUnmasked)
     local scale = tonumber(iconScale) or 1
     local originalMark = PaletteFX.markTrueColor
+    local opaqueClaimed = false
     PaletteFX.markTrueColor = function(rx, ry, rw, rh)
       rx, ry, rw, rh = tonumber(rx), tonumber(ry), tonumber(rw), tonumber(rh)
       if opaqueRuns then
-        for _, run in ipairs(opaqueRuns) do
-          regions[#regions + 1] = {
-            x = x + run.x * scale, y = y + run.y * scale,
-            w = math.max(1, run.w * scale), h = math.max(1, scale),
-          }
+        if not opaqueClaimed then
+          appendOpaqueRegions(regions, x, y, scale, opaqueRuns)
+          opaqueClaimed = true
         end
-      elseif rx and ry and rw and rh and rw > 0 and rh > 0 then
+      elseif not suppressUnmasked
+          and rx and ry and rw and rh and rw > 0 and rh > 0 then
         regions[#regions + 1] = {
           x = x + (rx - x) * scale,
           y = y + (ry - y) * scale,
           w = rw * scale,
           h = rh * scale,
         }
-        if background then
-          love.graphics.setColor(background[1] / 255,
-            background[2] / 255, background[3] / 255, 1)
-          love.graphics.rectangle("fill", rx, ry, rw, rh)
-        end
       end
     end
 
@@ -644,7 +894,48 @@ return function(mod, genderExports, compatibility)
     love.graphics.pop()
     PaletteFX.markTrueColor = originalMark
     if not ok then error(err, 0) end
-    return result
+    return result, opaqueClaimed
+  end
+
+  -- A stale or platform-incompatible per-species asset used to leave the
+  -- card's safety backing visible with no creature in it. Retry through the
+  -- engine's normal definition/dex icon chain instead. Registry values are
+  -- restored before returning, so this is local to the failed draw and does
+  -- not change another mod's data.
+  local function drawFallbackIcon(menu, mon, x, y, selected, counter, regions)
+    local icons = menu.game.data.icons or {}
+    local bySpecies = icons.bySpecies
+    local def = definition(menu, mon)
+    local speciesEntry = bySpecies and bySpecies[mon.species]
+    local defIcon = def and def.icon
+    local touchedSpecies, touchedDef = false, false
+
+    local function restore()
+      if touchedSpecies then bySpecies[mon.species] = speciesEntry end
+      if touchedDef then def.icon = defIcon end
+    end
+
+    local ok, drawn = pcall(function()
+      local result
+      if speciesEntry ~= nil then
+        bySpecies[mon.species] = nil
+        touchedSpecies = true
+        result = drawIconCollectingTrueColor(menu, mon, x, y,
+          selected, counter, regions, 1, nil, true)
+        if result == true then return true end
+      end
+      if defIcon ~= nil then
+        def.icon = nil
+        touchedDef = true
+        result = drawIconCollectingTrueColor(menu, mon, x, y,
+          selected, counter, regions, 1, nil, true)
+        if result == true then return true end
+      end
+      return false
+    end)
+    restore()
+    if not ok then error(drawn, 0) end
+    return drawn == true
   end
 
   local function drawFittedHgssIcon(menu, mon, entry, x, y, animate,
@@ -795,42 +1086,39 @@ return function(mod, genderExports, compatibility)
     local iconX, iconY = iconGeometry(x, y, width, height, iconSize)
     local textX = math.max(x + contentInset(width), iconX + iconSize + 2)
 
-    -- A true-colour zone restores the complete icon canvas rectangle, not
-    -- just the icon's opaque pixels. Paint the card's final display colour
-    -- behind the transparent pixels first, so that restore cannot reveal the
-    -- raw gray pre-palette card as a square backplate.
-    if trueColorIcon and not hgssIcon then
-      local background = cardFaceColor(menu, mon, selected)
-      if background then
-        love.graphics.setColor(background[1] / 255, background[2] / 255,
-          background[3] / 255, 1)
-        love.graphics.rectangle("fill", iconX - 1, iconY - 1,
-          iconSize + 2, iconSize + 2)
-      end
-    end
-
     gray(WHITE)
     -- Keep the roster calm and make focus immediately readable: the shared
     -- animation setting enables movement, while selection decides which one
     -- of the visible cards is allowed to advance beyond its resting frame.
     local regionCount = #trueColorIcons
     local animate = setting("animate_icons", true) and selected
-    local fitted = hgssIcon and drawFittedHgssIcon(menu, mon, entry,
-      iconX, iconY, animate, menu.blink or 0, iconSize, trueColorIcons)
-    if not fitted then
-      drawIconCollectingTrueColor(menu, mon, iconX, iconY,
-        animate, menu.blink or 0, trueColorIcons,
-        hgssIcon and nil or cardFaceColor(menu, mon, selected),
-        iconScale)
-    end
-    -- Renderers such as HGSS publish their exact transformed rectangle from
-    -- inside PartyMenu.drawIcon. Only add the generic safety rectangle when
-    -- a true-colour renderer did not claim one itself.
-    if trueColorIcon and #trueColorIcons == regionCount then
-      trueColorIcons[#trueColorIcons + 1] = {
-        x = iconX - 1, y = iconY - 1,
-        w = iconSize + 2, h = iconSize + 2,
-      }
+    local opaqueRuns = not hgssIcon
+      and iconOpaqueRuns(menu, mon, entry, animate, menu.blink or 0) or nil
+    local wildsDrawn = compatibility.wildsOfKanto
+      and drawWildsIcon(menu, mon, iconX, iconY,
+        animate, menu.blink or 0, trueColorIcons)
+    local fitted = not wildsDrawn and hgssIcon
+      and drawFittedHgssIcon(menu, mon, entry,
+        iconX, iconY, animate, menu.blink or 0, iconSize, trueColorIcons)
+    local drawn = wildsDrawn or fitted
+    if not drawn then
+      drawn = drawIconCollectingTrueColor(menu, mon, iconX, iconY,
+        animate, menu.blink or 0, trueColorIcons, iconScale, opaqueRuns,
+        type(entry) == "table" and opaqueRuns == nil)
+      if drawn ~= true then
+        -- A renderer may have claimed colour before discovering that its
+        -- image could not be loaded. Remove those claims before falling back
+        -- or the empty source canvas would still be restored as a square.
+        while #trueColorIcons > regionCount do
+          table.remove(trueColorIcons)
+        end
+        drawn = drawFallbackIcon(menu, mon, iconX, iconY,
+          animate, menu.blink or 0, trueColorIcons)
+      elseif trueColorIcon and opaqueRuns
+          and #trueColorIcons == regionCount then
+        appendOpaqueRegions(trueColorIcons, iconX, iconY,
+          iconScale, opaqueRuns)
+      end
     end
 
     drawText(stripGenderSuffix(

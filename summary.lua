@@ -373,9 +373,40 @@ return function(mod, genderExports, compatibility)
       layout.width - 4, 4, 48, WHITE)
   end
 
+  -- Resolve the same front-sprite context BattleState uses. A visual pack may
+  -- intentionally return different art for `battle` and `summary`; using the
+  -- latter made the status card disagree with the Pokémon actually fighting.
+  local function refreshBattleSprite(summary)
+    local mon = summary.mon
+    local species = mon and mon.species
+    if not species then return nil, false end
+    local path, trueColor = Sprites.path(summary.game.data, species, "front",
+      { mon = mon, kind = "battle" })
+    if summary.modernBattleSpriteSpecies ~= species
+        or summary.modernBattleSpritePath ~= path
+        or summary.modernBattleSpriteTrueColor ~= (trueColor and true or false) then
+      local image
+      if path then
+        local ok, loaded = pcall(Assets.image, path)
+        image = ok and loaded or nil
+      end
+      summary.modernBattleSpritePath = path
+      summary.modernBattleSpriteSpecies = species
+      summary.modernBattleSpriteTrueColor = trueColor and true or false
+      summary.modernBattleSprite = image
+      summary.modernSpritePath = path
+      summary.modernSpriteSpecies = species
+      summary.modernSprite = nil
+      summary.modernSpriteKey = nil
+    end
+    return summary.modernBattleSprite, summary.modernBattleSpriteTrueColor
+  end
+
   local function spriteGeometry(summary, layout)
-    if not summary.sprite then return nil end
-    local sw, sh = summary.sprite:getDimensions()
+    local source = refreshBattleSprite(summary)
+      or summary.modernBattleSprite or summary.sprite
+    if not source then return nil end
+    local sw, sh = source:getDimensions()
     local x = layout.railX + math.floor((layout.railW - sw) / 2)
     local y = layout.railY + 5 + math.max(0, math.floor((56 - sh) / 2))
     return x, y, sw, sh
@@ -446,19 +477,15 @@ return function(mod, genderExports, compatibility)
   end
 
   local function profileSprite(summary)
-    if summary.spriteTrueColor then return summary.sprite, true end
+    local battleSprite, battleTrueColor = refreshBattleSprite(summary)
+    if battleTrueColor and battleSprite then return battleSprite, true end
     -- QoL Toggles' PARTY SCROLL updates `self.mon` and the native sprite in
     -- place instead of constructing a new SummaryMenu. Refresh our separate
     -- matte/palette source as well; otherwise Pokémon sharing a palette key
     -- keep drawing the previously selected species from modernSprite.
     local species = summary.mon and summary.mon.species
     if summary.modernSpriteSpecies ~= species then
-      summary.modernSpritePath = species and Sprites.path(
-        summary.game.data, species, "front",
-        { mon = summary.mon, kind = "summary" }) or nil
-      summary.modernSpriteSpecies = species
-      summary.modernSprite = nil
-      summary.modernSpriteKey = nil
+      refreshBattleSprite(summary)
     end
     local artPalette, shiny = transformedArtPalette(summary,
       PaletteFX.monPal(summary.game.data, summary.mon.species)
@@ -471,7 +498,7 @@ return function(mod, genderExports, compatibility)
         colors)
       summary.modernSpriteKey = key
     end
-    return summary.modernSprite or summary.sprite,
+    return summary.modernSprite or battleSprite or summary.sprite,
       summary.modernSprite ~= nil
   end
 
@@ -1023,7 +1050,8 @@ return function(mod, genderExports, compatibility)
       -- Resolve through the same live sprite hook used by SummaryMenu so the
       -- matte mask follows asset replacements rather than a private copy.
       summary.modernSpritePath = Sprites.path(game.data, mon.species, "front",
-        { mon = mon, kind = "summary" })
+        { mon = mon, kind = "battle" })
+      summary.modernBattleSpritePath = summary.modernSpritePath
       summary.modernSpriteSpecies = mon.species
       summary.draw = draw
       summary.sgbPalettes = sgbPalettes

@@ -320,16 +320,18 @@ T.eq(iconCalls[1].x, 5,
   "the compact icon is horizontally centered in its available column")
 T.eq(iconCalls[1].y, 21,
   "the icon is vertically centered above the meter rows")
-T.eq(#trueColorMarks, 2,
-  "authored replacement icons are protected from the card palette")
-T.eq(trueColorMarks[1].x, 4,
-  "true-colour protection includes the first icon's seam guard")
-T.eq(trueColorMarks[1].y, 20,
-  "the icon seam guard follows its responsive card row")
-T.eq(#iconBackgrounds, 2,
-  "replacement icon transparency receives a colour-matched card backing")
-T.eq(iconBackgrounds[1].g, 208 / 255,
-  "the selected replacement icon backing uses its card's display colour")
+T.eq(#trueColorMarks, 16,
+  "authored replacement icons protect opaque rows instead of full canvases")
+T.eq(trueColorMarks[1].x, 5,
+  "true-colour protection starts at the icon's opaque pixels")
+T.eq(trueColorMarks[1].y, 21,
+  "opaque-row protection follows its responsive card row")
+T.eq(trueColorMarks[1].w, 8,
+  "the headless icon mask protects only its decoded opaque width")
+T.eq(trueColorMarks[1].h, 1,
+  "true-colour protection is split into individual opaque rows")
+T.eq(#iconBackgrounds, 0,
+  "replacement icon transparency never receives a rectangular backing")
 T.eq(cardLayers[2].color[1], 0,
   "the selected party card uses a dominant black outer frame")
 T.eq(cardLayers[2].points[1], 4,
@@ -373,20 +375,91 @@ T.eq(#originalModeMarks, 0,
 
 game.data.icons.bySpecies.FIXMON_A =
   uniqueEntry("icon_color", "FIXMON_A")
+local savedImageData = Assets.imageData
+local uniqueColorData = {}
+function uniqueColorData:getDimensions() return 16, 32 end
+function uniqueColorData:getPixel(px, py)
+  local row = py % 16
+  local opaque = row == 5 and px >= 4 and px <= 7
+    or row == 6 and px >= 3 and px <= 8
+  return 1, 1, 1, opaque and 1 or 0
+end
+Assets.imageData = function(path)
+  if tostring(path):find("icon_color", 1, true) then
+    return uniqueColorData
+  end
+  return savedImageData(path)
+end
 local colorModeMarks = {}
 PaletteFX.markTrueColor = function(x, y, w, h)
   colorModeMarks[#colorModeMarks + 1] = { x = x, y = y, w = w, h = h }
 end
 local colorModeOK, colorModeErr = pcall(screen.draw, screen)
+Assets.imageData = savedImageData
 T.check(colorModeOK,
   "Unique Menu Icons 1.5.0 UNIQUE COLORS mode draws: "
     .. tostring(colorModeErr))
-T.eq(#colorModeMarks, 2,
-  "Unique Menu Icons 1.5.0 literal-colour art stays true colour")
+T.eq(#colorModeMarks, 4,
+  "Unique Menu Icons colour art protects only its opaque runs")
+T.eq(colorModeMarks[1].x, 9,
+  "Unique Menu Icons transparent left padding is not restored")
+T.eq(colorModeMarks[1].w, 4,
+  "Unique Menu Icons does not publish its full transparent canvas")
 
 game.data.icons.bySpecies = savedEntries
 PartyMenu.drawIcon = savedDrawIcon
 PaletteFX.markTrueColor = savedMarkTrueColor
+end
+
+-- Gender Mod is intentionally absent from this run. A missing third-party
+-- sprite must not leave its old colour backing behind, and the renderer must
+-- retry after temporarily removing the broken per-species override so the
+-- game's normal definition/dex icon can draw instead.
+do
+local savedEntries = game.data.icons.bySpecies
+local savedDrawIcon = PartyMenu.drawIcon
+local savedMarkTrueColor = PaletteFX.markTrueColor
+local savedImageData = Assets.imageData
+local brokenCalls, fallbackCalls, missingMarks = 0, 0, {}
+game.data.icons.bySpecies = {
+  FIXMON_A = {
+    image = "mods/missing_icon_pack/assets/not_present.png",
+    frames = 2,
+  },
+}
+Assets.imageData = function(path)
+  if tostring(path):find("not_present", 1, true) then
+    error("missing test asset")
+  end
+  return savedImageData(path)
+end
+PartyMenu.drawIcon = function(game_, drawn)
+  if game_.data.icons.bySpecies[drawn.species] ~= nil then
+    brokenCalls = brokenCalls + 1
+    PaletteFX.markTrueColor(0, 0, 16, 16)
+    return nil
+  end
+  fallbackCalls = fallbackCalls + 1
+  return true
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  missingMarks[#missingMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+local missingOK, missingErr = pcall(screen.draw, screen)
+T.check(missingOK,
+  "a missing icon draws without Gender Mod: " .. tostring(missingErr))
+T.eq(brokenCalls, 2,
+  "each affected party member tries its third-party sprite once")
+T.eq(fallbackCalls, #party,
+  "missing third-party sprites fall back while unaffected cards still draw")
+T.eq(#missingMarks, 0,
+  "failed sprite colour claims cannot leave white or grey boxes")
+T.check(game.data.icons.bySpecies.FIXMON_A ~= nil,
+  "the third-party icon registry is restored after fallback")
+game.data.icons.bySpecies = savedEntries
+PartyMenu.drawIcon = savedDrawIcon
+PaletteFX.markTrueColor = savedMarkTrueColor
+Assets.imageData = savedImageData
 end
 local hpOverlay, expOverlay
 for _, call in ipairs(drawnText) do
@@ -416,8 +489,8 @@ PartyMenu.drawIcon = realDrawIcon
 PaletteFX.markTrueColor = realMarkTrueColor
 T.check(modalOK,
   "the action menu draws with colour-icon clipping: " .. tostring(modalErr))
-T.eq(#modalMarks, 1,
-  "a replacement icon fully covered by the action menu is not restored")
+T.eq(#modalMarks, 8,
+  "only the opaque rows of an uncovered replacement icon are restored")
 local popup = { x = 20, y = 48, w = 122, h = 42 }
 for _, rect in ipairs(modalMarks) do
   local overlaps = rect.x < popup.x + popup.w
@@ -555,9 +628,24 @@ party[1].moves = {
   { id = "FIX_CUT", pp = 24 }, { id = "FIX_SCRATCH", pp = 35 },
 }
 party[1].ot, party[1].otId = "RED", 13839
+_G.__modernPartyRealSpritePath = require("src.pokemon.Sprites").path
+_G.__modernPartySpriteContexts = {}
+require("src.pokemon.Sprites").path = function(data_, species, side, opts)
+  _G.__modernPartySpriteContexts[#_G.__modernPartySpriteContexts + 1] = {
+    species = species, side = side, kind = opts and opts.kind,
+  }
+  return _G.__modernPartyRealSpritePath(data_, species, side, opts)
+end
 local summary = summaryRecord.new(game, party[1])
+require("src.pokemon.Sprites").path = _G.__modernPartyRealSpritePath
 T.check(summary.modernPartySummary == true,
   "the modern summary presentation is installed")
+T.eq(_G.__modernPartySpriteContexts[#_G.__modernPartySpriteContexts]
+    and _G.__modernPartySpriteContexts[#_G.__modernPartySpriteContexts].kind,
+  "battle",
+  "the summary's displayed artwork resolves through the battle context")
+_G.__modernPartyRealSpritePath = nil
+_G.__modernPartySpriteContexts = nil
 T.eq(summary.modernSummaryLayout, "responsive_cards",
   "the summary identifies its adaptive card layout")
 T.eq(getmetatable(summary), SummaryMenu,
@@ -880,6 +968,115 @@ PartyMenu.drawIcon = drawIconBeforeHgss
 hgssRun.release()
 end
 
+-- Wilds of Kanto exposes its configured follower sheet independently of its
+-- PartyMenu.drawIcon wrapper. Another late-loading icon mod can legitimately
+-- replace that shared wrapper; Modern Party UI must still draw Wilds artwork
+-- instead of leaving all six card rails empty.
+do
+local wildsData = T.fixtures.fresh()
+wildsData.icons = { icons = {}, byDex = {}, bySpecies = {} }
+wildsData.palettes = data.palettes
+Font.load(wildsData)
+local drawIconBeforeWilds = PartyMenu.drawIcon
+local wildsRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/wilds_of_kanto",
+  "mods/modern_party_ui",
+}, { data = wildsData, dev = true })
+T.eq(#wildsRun.errors, 0, "loads beside Wilds of Kanto 2.1.7")
+
+local wildsGame = {
+  data = wildsRun.data,
+  save = { party = party, inventory = {}, options = {} },
+  stack = { states = {} },
+  input = { wasPressed = function() return false end },
+  renderer = { uiSize = function() return 320, 240 end },
+}
+local wildsScreen = wildsRun.data.screens.PartyMenu.new(wildsGame, {})
+wildsScreen.blink = 5
+local graphics = love.graphics
+local realWildsDraw = graphics.draw
+local realWildsImage = Assets.image
+local realWildsImageData = Assets.imageData
+local realWildsMark = PaletteFX.markTrueColor
+local wildsDraws, wildsMarks = {}, {}
+local fakeWildsData = {}
+function fakeWildsData:getDimensions() return 16, 96 end
+function fakeWildsData:getPixel(px, py)
+  -- A deliberately narrow creature proves true-colour protection follows
+  -- visible pixels instead of restoring its transparent 16x16 canvas.
+  local localY = py % 16
+  local opaque = px >= 4 and px <= 11 and localY >= 3 and localY <= 12
+  return 1, 1, 1, opaque and 1 or 0
+end
+Assets.image = function(path)
+  if tostring(path):find("overworld_wild_spawns", 1, true) then
+    return {
+      path = path,
+      getDimensions = function() return 16, 96 end,
+      getWidth = function() return 16 end,
+      getHeight = function() return 96 end,
+    }
+  end
+  return realWildsImage(path)
+end
+Assets.imageData = function(path)
+  if tostring(path):find("overworld_wild_spawns", 1, true) then
+    return fakeWildsData
+  end
+  return realWildsImageData(path)
+end
+-- Reproduce the reported load order: the global renderer no longer belongs
+-- to Wilds and cannot draw any of its sprite sheets.
+PartyMenu.drawIcon = function() return false end
+graphics.draw = function(image, quad, x, y, rotation, sx, sy, ...)
+  if type(image) == "table"
+      and tostring(image.path):find("overworld_wild_spawns", 1, true) then
+    wildsDraws[#wildsDraws + 1] = {
+      path = image.path, quad = quad, x = x, y = y,
+      sx = sx or 1, sy = sy or sx or 1,
+    }
+  end
+  return realWildsDraw(image, quad, x, y, rotation, sx, sy, ...)
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  wildsMarks[#wildsMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+
+local wildsOK, wildsErr = pcall(wildsScreen.draw, wildsScreen)
+graphics.draw = realWildsDraw
+Assets.image = realWildsImage
+Assets.imageData = realWildsImageData
+PaletteFX.markTrueColor = realWildsMark
+PartyMenu.drawIcon = drawIconBeforeWilds
+T.check(wildsOK,
+  "Wilds artwork draws without its global icon hook: " .. tostring(wildsErr))
+T.eq(#wildsDraws, #party,
+  "every occupied party card consumes Wilds' exported sprite sheet")
+local wildsCalls = wildsRun.loader.exports.overworld_wild_spawns.calls
+T.eq(#wildsCalls, 3,
+  "each distinct party species is resolved once through Wilds' public API")
+for i, call in ipairs(wildsCalls) do
+  T.eq(call.species, party[i].species,
+    "Wilds resolver receives party species " .. i)
+  T.eq(call.role, "party_menu",
+    "Wilds resolver receives the party-menu role")
+end
+T.check(wildsDraws[1] and wildsDraws[1].quad.y == 48,
+  "the highlighted healthy card uses Wilds' authored walk frame")
+for i = 2, #wildsDraws do
+  T.check(wildsDraws[i].quad.y == 0,
+    "unselected Wilds card " .. i .. " stays on its authored idle frame")
+end
+T.check(#wildsMarks > #party,
+  "Wilds true-colour protection follows opaque sprite rows")
+for _, rect in ipairs(wildsMarks) do
+  T.check(rect.w < 16,
+    "Wilds transparent padding is never restored as a square")
+end
+
+wildsRun.release()
+end
+
 -- QoL Toggles PARTY SCROLL changes the live SummaryMenu's mon and native
 -- sprite in place. The modern masked-art cache must follow that species even
 -- when both Pokémon resolve to the same palette key.
@@ -890,7 +1087,7 @@ local firstSummaryMon, firstSummarySprite = summary.mon, summary.sprite
 local switchedMon = party[2]
 local switchedPath = require("src.pokemon.Sprites").path(
   game.data, switchedMon.species, "front",
-  { mon = switchedMon, kind = "summary" })
+  { mon = switchedMon, kind = "battle" })
 summary.mon = switchedMon
 summary.sprite = love.graphics.newImage(switchedPath)
 summary.spriteTrueColor = false

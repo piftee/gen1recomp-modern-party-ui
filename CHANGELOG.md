@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.18 - 2026-08-23
+
+- Summary profiles now resolve the same `battle` front-sprite selection used
+  in combat, removing visual mismatches caused by context-specific art mods.
+- Kept responsive palette masking, shiny transforms, animated replacements,
+  and in-place PARTY SCROLL refreshes on the battle-selected source artwork.
+- Party icons now preserve authored colour only on opaque sprite pixels, so
+  transparent canvases cannot appear as white or grey boxes with or without
+  Gender Mod. Missing third-party icon assets fall back to the normal game
+  icon instead of leaving an empty square.
+- Wilds of Kanto party art now resolves through its exported follower-sprite
+  API, so a later mod replacing the shared party-icon hook cannot make every
+  card sprite disappear. Wilds' authored idle/walk frames and transparent
+  padding remain intact.
+- Added regression coverage for the shared battle-sprite context and for a
+  late party-icon hook replacing Wilds of Kanto's renderer.
+
 ## 0.3.17 - 2026-08-23
 
 - Added compatibility with Unique Menu Icons 1.5.0's renamed asset folders.
