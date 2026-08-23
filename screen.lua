@@ -774,7 +774,12 @@ return function(mod, genderExports, compatibility)
     local hgssIcon = false
     if type(entry) == "table" then
       local path = tostring(entry.image or ""):lower()
+      -- Unique Menu Icons 1.5.0 renamed these folders from icons_* to
+      -- icon_*.  ORIGINAL is deliberately palette-driven in both layouts;
+      -- treating the new singular path as authored true colour preserves
+      -- its literal grayscale pixels and is what made those icons look gray.
       local paletteAware = path:find("icons_original", 1, true) ~= nil
+        or path:find("icon_original", 1, true) ~= nil
       trueColorIcon = not paletteAware
         or PartyMenu._uniqueMenuIconsTrueColorWrapped == true
       hgssIcon = compatibility.hgssSprites and entry.trueColor == true

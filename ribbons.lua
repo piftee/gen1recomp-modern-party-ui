@@ -400,7 +400,10 @@ return function(mod, _, compatibility)
     local hgssIcon = false
     if type(entry) == "table" then
       local path = tostring(entry.image or ""):lower()
+      -- Support both the pre-1.5.0 icons_original folder and 1.5.0's
+      -- singular icon_original name.  Both contain palette-aware art.
       local paletteAware = path:find("icons_original", 1, true) ~= nil
+        or path:find("icon_original", 1, true) ~= nil
       trueColorIcon = not paletteAware
         or PartyMenu._uniqueMenuIconsTrueColorWrapped == true
       hgssIcon = isHgssEntry(entry)
