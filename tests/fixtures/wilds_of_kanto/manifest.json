@@ -1,0 +1,10 @@
+{
+  "id": "overworld_wild_spawns",
+  "name": "Wilds of Kanto Compatibility Fixture",
+  "version": "2.1.7",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "overhaul",
+  "priority": 80,
+  "permissions": ["engine_internals"]
+}

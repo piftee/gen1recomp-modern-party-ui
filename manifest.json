@@ -1,7 +1,7 @@
 {
   "id": "modern_party_ui",
   "name": "Modern Party UI",
-  "version": "0.3.17",
+  "version": "0.3.18",
   "github": "piftee/gen1recomp-modern-party-ui",
   "api": 2,
   "entry": "main.lua",

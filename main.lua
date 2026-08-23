@@ -132,6 +132,7 @@ return function(mod)
   local kantoRibbons = mod.find("kanto_ribbons")
   local dramaticShape = mod.find("DRAMATIC_SHAPE")
   local crystal251 = mod.find("CRYSTAL_251")
+  local wildsOfKanto = mod.find("overworld_wild_spawns")
   local compatibility = {
     dvTracker = mod.find("dv_tracker") ~= nil,
     kantoRibbons = kantoRibbons ~= nil,
@@ -146,6 +147,8 @@ return function(mod)
       and crystal251.exports.crystalSummary or nil,
     uniqueMenuIcons = mod.find("unique_menu_icons") ~= nil,
     hgssSprites = mod.find("HGSS_SPRITES") ~= nil,
+    wildsOfKanto = wildsOfKanto ~= nil,
+    wildsOfKantoExports = wildsOfKanto and wildsOfKanto.exports or nil,
   }
 
   local function loadScreen(filename, label)
