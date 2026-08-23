@@ -338,6 +338,56 @@ T.eq(cardLayers[2].points[2], 16,
   "the selected frame is raised one pixel without moving card contents")
 T.eq(#fractionalScales, 0,
   "the native tile font is never fractionally scaled")
+
+-- Unique Menu Icons 1.5.0 renamed its three asset folders from icons_* to
+-- icon_*.  ORIGINAL remains palette-aware; protecting its grayscale source
+-- as literal true colour would bypass the card palette and make it look gray.
+do
+local savedEntries = game.data.icons.bySpecies
+local savedDrawIcon = PartyMenu.drawIcon
+local savedMarkTrueColor = PaletteFX.markTrueColor
+local function uniqueEntry(folder, species)
+  return {
+    image = "mods/unique_menu_icons/assets/" .. folder .. "/"
+      .. species .. ".png",
+    frames = 2,
+  }
+end
+
+game.data.icons.bySpecies = {
+  FIXMON_A = uniqueEntry("icon_original", "FIXMON_A"),
+  FIXMON_B = uniqueEntry("icon_original", "FIXMON_B"),
+  FIXMON_C = uniqueEntry("icon_original", "FIXMON_C"),
+}
+PartyMenu.drawIcon = function() return true end
+local originalModeMarks = {}
+PaletteFX.markTrueColor = function(x, y, w, h)
+  originalModeMarks[#originalModeMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+local originalModeOK, originalModeErr = pcall(screen.draw, screen)
+T.check(originalModeOK,
+  "Unique Menu Icons 1.5.0 ORIGINAL mode draws: "
+    .. tostring(originalModeErr))
+T.eq(#originalModeMarks, 0,
+  "Unique Menu Icons 1.5.0 ORIGINAL art remains card-palette aware")
+
+game.data.icons.bySpecies.FIXMON_A =
+  uniqueEntry("icon_color", "FIXMON_A")
+local colorModeMarks = {}
+PaletteFX.markTrueColor = function(x, y, w, h)
+  colorModeMarks[#colorModeMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+local colorModeOK, colorModeErr = pcall(screen.draw, screen)
+T.check(colorModeOK,
+  "Unique Menu Icons 1.5.0 UNIQUE COLORS mode draws: "
+    .. tostring(colorModeErr))
+T.eq(#colorModeMarks, 2,
+  "Unique Menu Icons 1.5.0 literal-colour art stays true colour")
+
+game.data.icons.bySpecies = savedEntries
+PartyMenu.drawIcon = savedDrawIcon
+PaletteFX.markTrueColor = savedMarkTrueColor
+end
 local hpOverlay, expOverlay
 for _, call in ipairs(drawnText) do
   if call.text == "45/45" then hpOverlay = call end

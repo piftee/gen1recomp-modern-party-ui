@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.17 - 2026-08-23
+
+- Added compatibility with Unique Menu Icons 1.5.0's renamed asset folders.
+- ORIGINAL mode now follows the active party-card palette, while GBC RED and
+  UNIQUE COLORS retain their authored colours on party and Kanto Ribbons screens.
+- Added regression coverage for the new 1.5.0 asset paths and palette modes.
+
 ## 0.3.16 - 2026-08-22
 
 - ICON ANIMATION now follows party focus: only the highlighted Pokémon moves,
