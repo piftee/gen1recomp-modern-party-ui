@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.20 - 2026-08-24
+
+- Summary profiles now composite and protect the complete inner card face
+  instead of tracing the source sprite canvas. This removes the faint frame,
+  seam, and edge stroke exposed by Android scaling in portrait and landscape
+  while retaining each Pokémon's battle-selected artwork and colours.
+
 ## 0.3.19 - 2026-08-24
 
 - Removed magnified horizontal backdrop bands between party cards on narrow
