@@ -751,6 +751,8 @@ T.eq(summaryZones[1].w, 256,
   "the summary base palette covers the complete wide surface")
 T.check(exactBase(summaryZones[2], { 101, 188, 94 }),
   "the profile rail uses the same exact Grass card colour as the party")
+T.check(exactBase(summaryZones[3], { 101, 188, 94 }),
+  "cool SGB summary surfaces keep their live type colour")
 T.eq(#summaryZones, 4,
   "summary palettes no longer recolour the entire sprite rectangle")
 local summaryText, summaryMarks = {}, {}
@@ -780,6 +782,46 @@ T.eq(summaryMarks[1].h, 110,
 T.check(summaryMarks[1].w > protectedSpriteW + 2
     or summaryMarks[1].h > protectedSpriteH + 2,
   "summary artwork protection no longer traces the source canvas")
+
+-- SGB's pale REDMON/YELLOWMON/BROWNMON ramps work at native tile size but
+-- lose definition when isolated as large profile artwork. Confirm that only
+-- the grayscale portrait bake borrows the stronger Advanced warm ramp.
+do
+local warmPixels = {}
+for y = 0, 2 do
+  warmPixels[y] = {}
+  for x = 0, 2 do warmPixels[y][x] = { 0, 0, 0, 0 } end
+end
+warmPixels[1][1] = { 0.5, 0.5, 0.5, 1 }
+local warmData = {}
+function warmData:getDimensions() return 3, 3 end
+function warmData:getPixel(x, y) return unpack(warmPixels[y][x]) end
+function warmData:mapPixel(fn)
+  for y = 0, 2 do
+    for x = 0, 2 do
+      warmPixels[y][x] = { fn(x, y, self:getPixel(x, y)) }
+    end
+  end
+end
+local realWarmImageData = Assets.imageData
+Assets.imageData = function() return warmData end
+local warmSummary = summaryRecord.new(game, party[2])
+local warmSummaryZones = warmSummary:sgbPalettes(game) or {}
+T.eq(warmSummaryZones[3] and warmSummaryZones[3].colors,
+  run.data.palettes.palettes.BLUEMON,
+  "warm SGB summary vitals use the cool base instead of an isolated yellow slab")
+local warmOK, warmErr = pcall(warmSummary.draw, warmSummary)
+Assets.imageData = realWarmImageData
+T.check(warmOK,
+  "an SGB warm-palette summary draws: " .. tostring(warmErr))
+local vividRed = PaletteFX.gbcPack().palettes.REDMON[3]
+T.eq(math.floor(warmPixels[1][1][1] * 255 + 0.5), vividRed[1],
+  "large SGB summary portraits use the higher-contrast warm midpoint")
+T.eq(math.floor(warmPixels[1][1][2] * 255 + 0.5), vividRed[2],
+  "the SGB summary midpoint keeps the Advanced green channel")
+T.eq(math.floor(warmPixels[1][1][3] * 255 + 0.5), vividRed[3],
+  "the SGB summary midpoint keeps the Advanced blue channel")
+end
 
 -- Unique Menu Icons publishes fixed party-row true-colour rectangles.  A
 -- PartyMenu -> SummaryMenu transition may happen during the same frame, so

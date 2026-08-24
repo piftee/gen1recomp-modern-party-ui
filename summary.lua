@@ -358,6 +358,27 @@ return function(mod, genderExports, compatibility)
       or PaletteFX.GRAYS
   end
 
+  -- SGB's pale yellow/orange card ramps are much harsher at the enlarged
+  -- summary scale than its cool and green ramps. The portrait composite is
+  -- already neutral on these pages, so leaving the vitals card warm creates
+  -- one isolated yellow slab. Keep semantic HEALTH colours and explicit
+  -- BLUE/MONO choices intact; only default type/species surfaces borrow the
+  -- summary's existing cool base palette when their light shade is warm.
+  local function summarySurfacePalette(summary, primary, base)
+    local mode = PaletteFX.mode
+    if mode ~= "gbc" and mode ~= "gbc_inv" then return primary end
+    local style = setting("card_color", "species")
+    if style == "health" or style == "blue" or style == "mono" then
+      return primary
+    end
+    local colors = PaletteFX.effectiveColors(primary) or primary
+    local light = colors and colors[2]
+    if not light then return primary end
+    local r, g, b = light[1] or 0, light[2] or 0, light[3] or 0
+    local warm = r >= 200 and g >= 120 and b <= 160 and g >= b + 8
+    return warm and base or primary
+  end
+
   local function movePalette(summary, move)
     local def = move and summary.game.data.moves[move.id]
     local id = def and tostring(def.type or "NORMAL"):upper() or "NORMAL"
@@ -439,6 +460,26 @@ return function(mod, genderExports, compatibility)
     return table.concat(values, ":")
   end
 
+  local WARM_SGB_PORTRAITS = {
+    REDMON = true, YELLOWMON = true, BROWNMON = true,
+  }
+
+  -- Preserve SGB's palette across the interface while preventing its pale
+  -- orange/yellow monster ramps from washing out when battle art is enlarged
+  -- into a standalone profile. The Advanced pack contains stronger versions
+  -- of the same Gen 1 REDMON/YELLOWMON/BROWNMON assignments, so only those
+  -- grayscale portraits borrow that contrast. Other hues, true-colour art,
+  -- and non-SGB display modes are untouched.
+  local function portraitArtPalette(data, species)
+    local palette = PaletteFX.monPal(data, species)
+    local mode = PaletteFX.mode
+    if mode ~= "gbc" and mode ~= "gbc_inv" then return palette end
+    local name = PaletteFX.monPalName(data, species)
+    if not WARM_SGB_PORTRAITS[name] then return palette end
+    local pack = PaletteFX.gbcPack and PaletteFX.gbcPack() or nil
+    return pack and pack.palettes and pack.palettes[name] or palette
+  end
+
   -- Front sprites are opaque four-shade images. Only the lightest pixels
   -- connected to an outside edge are matte; the same light shade is also
   -- legitimate artwork inside the outline (eyes, bellies and highlights).
@@ -500,7 +541,7 @@ return function(mod, genderExports, compatibility)
       refreshBattleSprite(summary)
     end
     local artPalette, shiny = transformedArtPalette(summary,
-      PaletteFX.monPal(summary.game.data, summary.mon.species)
+      portraitArtPalette(summary.game.data, summary.mon.species)
         or primaryPalette(summary))
     summary.modernDramaticShapeShiny = shiny
     local colors = PaletteFX.effectiveColors(artPalette)
@@ -553,7 +594,7 @@ return function(mod, genderExports, compatibility)
         if shader then
           love.graphics.setShader(shader)
           local artPalette = transformedArtPalette(summary,
-            PaletteFX.monPal(summary.game.data, mon.species)
+            portraitArtPalette(summary.game.data, mon.species)
               or primaryPalette(summary))
           PaletteFX.sendColors(shader, artPalette)
         end
@@ -1039,7 +1080,8 @@ return function(mod, genderExports, compatibility)
 
     if summary.page == 1 then
       zones[#zones + 1] = {
-        colors = primary, x = layout.mainX, y = layout.mainY,
+        colors = summarySurfacePalette(summary, primary, base),
+        x = layout.mainX, y = layout.mainY,
         w = layout.mainW, h = 42,
       }
       local maxHP = summary.mon.stats and summary.mon.stats.hp or 1
