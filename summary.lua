@@ -518,17 +518,31 @@ return function(mod, genderExports, compatibility)
     local mon, def = summary.mon, definition(summary)
     drawCard(layout.railX, layout.railY, layout.railW, layout.railH, true)
     local x, y, sw, sh = spriteGeometry(summary, layout)
+    local protectedFace
     if x then
-      -- Paint the sprite cell with the card's final face colour. The masked
-      -- sprite has a genuinely transparent exterior but keeps light artwork
-      -- enclosed by its outline; the true-colour mark restores this already
-      -- composited result after the screen-wide palette pass.
+      -- Composite the card's complete inner face instead of drawing a tight
+      -- sprite-sized guard. Android can reveal any true-colour protection
+      -- boundary that ends over a flat palette surface, even when both sides
+      -- nominally use the same colour. Extending the borderless composite to
+      -- the card's structural edge leaves no free-standing frame or stroke.
+      protectedFace = {
+        x = layout.railX + 2,
+        y = layout.railY + 2,
+        w = math.max(1, layout.railW - 6),
+        h = math.max(1, layout.railH - 6),
+      }
       local faceColors = PaletteFX.effectiveColors(primaryPalette(summary))
         or PaletteFX.GRAYS
+      local edge = faceColors[4] or { 0, 0, 0 }
+      love.graphics.setColor(edge[1] / 255, edge[2] / 255,
+        edge[3] / 255, 1)
+      love.graphics.rectangle("fill", protectedFace.x, protectedFace.y,
+        protectedFace.w, protectedFace.h)
       local face = faceColors[2] or { 170, 170, 170 }
       love.graphics.setColor(face[1] / 255, face[2] / 255,
         face[3] / 255, 1)
-      love.graphics.rectangle("fill", x - 1, y - 1, sw + 2, sh + 2)
+      chamfer("fill", protectedFace.x, protectedFace.y,
+        protectedFace.w, protectedFace.h, 3)
 
       local image, paletteBaked = profileSprite(summary)
       local shader
@@ -549,10 +563,6 @@ return function(mod, genderExports, compatibility)
       -- presentation detail and the live sprite supplied by other mods.
       love.graphics.draw(image, x + sw, y, 0, -1, 1)
       if shader then love.graphics.setShader() end
-      -- Renderer scissors are rounded outward in physical pixels. Protect a
-      -- matching one-pixel guard as well as the sprite canvas so the bare
-      -- re-blit cannot reveal a grey seam around the artwork.
-      PaletteFX.markTrueColor(x - 1, y - 1, sw + 2, sh + 2)
     end
 
     local compact = layout.railW < 72
@@ -573,6 +583,13 @@ return function(mod, genderExports, compatibility)
     drawText("OT " .. tostring(ot), textX, infoY + 31, textW, BLACK)
     drawText((compact and "ID%05d" or "ID %05d"):format(id),
       textX, infoY + 41, textW, BLACK)
+    if protectedFace then
+      -- Register this after drawing the text so the complete finished card
+      -- face is restored as one stable region. There is deliberately no
+      -- source-canvas-sized inset and no edge stroke.
+      PaletteFX.markTrueColor(protectedFace.x, protectedFace.y,
+        protectedFace.w, protectedFace.h)
+    end
   end
 
   local function drawMeter(fraction, x, y, w)

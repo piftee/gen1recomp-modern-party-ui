@@ -769,10 +769,17 @@ T.check(summaryOK,
 T.eq(#summaryMarks, 1,
   "the sprite-only colour result is protected from the card palette")
 local protectedSpriteW, protectedSpriteH = summary.sprite:getDimensions()
-T.eq(summaryMarks[1].w, protectedSpriteW + 2,
-  "summary artwork protection includes a horizontal seam guard")
-T.eq(summaryMarks[1].h, protectedSpriteH + 2,
-  "summary artwork protection includes a vertical seam guard")
+T.eq(summaryMarks[1].x, 4,
+  "summary artwork protection starts at the card's inner edge")
+T.eq(summaryMarks[1].y, 20,
+  "summary artwork protection starts at the card's structural edge")
+T.eq(summaryMarks[1].w, 73,
+  "summary artwork protection spans the borderless card face")
+T.eq(summaryMarks[1].h, 110,
+  "summary artwork protection reaches the card's bottom structure")
+T.check(summaryMarks[1].w > protectedSpriteW + 2
+    or summaryMarks[1].h > protectedSpriteH + 2,
+  "summary artwork protection no longer traces the source canvas")
 
 -- Unique Menu Icons publishes fixed party-row true-colour rectangles.  A
 -- PartyMenu -> SummaryMenu transition may happen during the same frame, so
