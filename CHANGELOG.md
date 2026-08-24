@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.21 - 2026-08-24
+
+- Large SGB summary portraits using the pale red, yellow, or brown monster
+  ramps now use the stronger equivalent midtones from the bundled Advanced
+  palette pack. Other SGB hues, authored true-colour sprites, and non-SGB
+  display modes remain unchanged.
+- Default type/species summary cards no longer leave an isolated yellow or
+  orange vitals slab beside the neutral portrait. Warm SGB surfaces use the
+  existing cool summary base, while cool types and explicit Health, Blue, or
+  Mono colour choices keep their selected palette.
+
 ## 0.3.20 - 2026-08-24
 
 - Summary profiles now composite and protect the complete inner card face
