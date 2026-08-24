@@ -12,6 +12,8 @@ return function(mod, genderExports, compatibility)
   local Sprites = require("src.pokemon.Sprites")
   local SummaryMenu = require("src.ui.SummaryMenu")
   local TypeChart = require("src.battle.TypeChart")
+  local faithfulLoaded, FaithfulRes = pcall(require, "src.core.FaithfulRes")
+  if not faithfulLoaded then FaithfulRes = nil end
 
   local SCREEN_H = 144
   local HEADER_H = 16
@@ -89,8 +91,17 @@ return function(mod, genderExports, compatibility)
     love.graphics.setColor(value, value, value, 1)
   end
 
+  local function faithfulRatioActive()
+    if not (FaithfulRes and type(FaithfulRes.scaleCap) == "function") then
+      return false
+    end
+    local ok, cap = pcall(FaithfulRes.scaleCap)
+    return ok and cap ~= nil
+  end
+
   local function responsiveWidth()
     if not setting("responsive", true) then return 160 end
+    if faithfulRatioActive() then return 160 end
     local width, height
     if love.graphics.getPixelDimensions then
       width, height = love.graphics.getPixelDimensions()
@@ -114,7 +125,8 @@ return function(mod, genderExports, compatibility)
   local function layoutFor(summary)
     local width = responsiveWidth()
     local renderer = summary and summary.game and summary.game.renderer
-    if setting("responsive", true) and renderer and renderer.uiSize then
+    if setting("responsive", true) and not faithfulRatioActive()
+        and renderer and renderer.uiSize then
       width = select(1, renderer:uiSize()) or width
     end
     width = math.max(160, math.floor(width))

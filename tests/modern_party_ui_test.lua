@@ -661,8 +661,79 @@ T.eq(select(1, summary:uiSize()), 180,
   "a narrow portrait display uses the width-fitting integer scale")
 T.eq(select(1, screen:uiSize()), 160,
   "the party roster matches Modern Bag UI's readable portrait width")
-T.eq(select(2, screen:uiSize()), 400,
-  "the party roster fills the available tall-phone surface")
+T.eq(select(2, screen:uiSize()), 396,
+  "the party roster snaps the tall-phone surface to six equal card rows")
+;(function()
+  local FaithfulRes = require("src.core.FaithfulRes")
+  local portraitZones = screen:sgbPalettes(game) or {}
+  for i = 0, 5 do
+    local card = portraitZones[2 + i * 3]
+    T.eq(card and card.h, 62,
+      "portrait card " .. tostring(i + 1) .. " has an equal native height")
+    if i > 0 then
+      local previous = portraitZones[2 + (i - 1) * 3]
+      T.eq(card and card.y, previous and previous.y + previous.h,
+        "portrait card " .. tostring(i + 1) .. " shares its preceding edge")
+    end
+  end
+
+  -- Portrait frame joins cover the patterned layer before their chamfers are
+  -- drawn. This is the native one-pixel seam that becomes a broad band at a
+  -- phone's 5x/6x output scale.
+  local realRectangle = graphics.rectangle
+  local realDrawIcon = PartyMenu.drawIcon
+  local seamlessCells = 0
+  graphics.rectangle = function(mode, x, y, w, h)
+    if mode == "fill" and x == 0 and w == 160 and h == 62 then
+      local r, g, b = graphics.getColor()
+      if math.abs(r - 85 / 255) < 0.001
+          and math.abs(g - r) < 0.001 and math.abs(b - r) < 0.001 then
+        seamlessCells = seamlessCells + 1
+      end
+    end
+    return realRectangle(mode, x, y, w, h)
+  end
+  PartyMenu.drawIcon = function() return true end
+  local portraitOK, portraitErr = pcall(screen.draw, screen)
+  PartyMenu.drawIcon = realDrawIcon
+  graphics.rectangle = realRectangle
+  T.check(portraitOK,
+    "the seamless portrait roster draws: " .. tostring(portraitErr))
+  T.eq(seamlessCells, 6,
+    "all six portrait cells cover the backdrop at their shared edges")
+
+
+  -- Faithful Ratio owns a classic 160x144 native viewport on mobile. Ignore a
+  -- stale responsive renderer size and a tall Modern Bag parent while locked.
+  local realScaleCap = FaithfulRes.scaleCap
+  FaithfulRes.scaleCap = function() return 6 end
+  local faithfulBag = {
+    modernBagUI = true,
+    uiSize = function() return 160, 396 end,
+  }
+  stack:push(faithfulBag)
+  stack:push(screen)
+  game.renderer = { uiSize = function() return 160, 396 end }
+  T.eq(select(1, screen:uiSize()), 160,
+    "Faithful Ratio keeps the native party width")
+  T.eq(select(2, screen:uiSize()), 144,
+    "Faithful Ratio restores the native party height")
+  local faithfulLayout = screen:modernPartyLayoutInfo()
+  T.eq(faithfulLayout.height, 144,
+    "a stale tall renderer cannot override the faithful party viewport")
+  T.eq(faithfulLayout.columns, 2,
+    "Faithful Ratio uses the complete classic party composition")
+  game.renderer = { uiSize = function() return 180, 144 end }
+  T.eq(select(1, summary:uiSize()), 160,
+    "Faithful Ratio also keeps summary pages at the native width")
+  local faithfulSummaryZones = summary:sgbPalettes(game) or {}
+  T.eq(faithfulSummaryZones[1] and faithfulSummaryZones[1].w, 160,
+    "a stale wide renderer cannot override the faithful summary viewport")
+  stack:pop()
+  stack:pop()
+  game.renderer = nil
+  FaithfulRes.scaleCap = realScaleCap
+end)()
 graphics.getPixelDimensions = function() return 1280, 720 end
 T.eq(select(1, summary:uiSize()), 256,
   "a 16:9 desktop display matches the responsive party surface")
@@ -1602,6 +1673,17 @@ T.eq(modernUiExports.shouldSuppress(modernRibbonScreen), false,
   "Gen1 Modern UI also preserves the cohesive ribbon renderer")
 T.eq(select(1, modernRibbonScreen:uiSize()), 256,
   "the ribbon screen uses the same responsive width as the summary")
+;(function()
+  local FaithfulRes = require("src.core.FaithfulRes")
+  local realScaleCap = FaithfulRes.scaleCap
+  FaithfulRes.scaleCap = function() return 6 end
+  T.eq(select(1, modernRibbonScreen:uiSize()), 160,
+    "Faithful Ratio keeps the ribbon collection at the native width")
+  local faithfulZones = modernRibbonScreen:sgbPalettes(ribbonGame) or {}
+  T.eq(faithfulZones[1] and faithfulZones[1].w, 160,
+    "a stale wide renderer cannot override the faithful ribbon viewport")
+  FaithfulRes.scaleCap = realScaleCap
+end)()
 local modernRibbonText = {}
 Font.draw = function(text, x, y)
   modernRibbonText[#modernRibbonText + 1] = { text = text, x = x, y = y }
