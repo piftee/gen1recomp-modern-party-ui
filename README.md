@@ -209,6 +209,11 @@ love . --developer
 Import a legally obtained canonical US Red, Blue or Yellow ROM on first launch.
 Open **POKéMON** from the Start menu. While developing, press **F5** to reload.
 
+On narrow phones, responsive mode uses a six-row portrait roster and aligns
+every card to the native pixel grid. When the game's **Faithful Ratio** option
+is enabled, the party, summary and ribbon screens instead retain the classic
+160x144 viewport; pillarboxing or letterboxing on a tall display is expected.
+
 ## Compatibility
 
 This mod declares `engine_internals` because the public UI kit does not expose the

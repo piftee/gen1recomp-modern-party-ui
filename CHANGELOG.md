@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.19 - 2026-08-24
+
+- Removed magnified horizontal backdrop bands between party cards on narrow
+  portrait screens by keeping all six card rows on a shared native-pixel grid
+  and covering their joins before the chamfered frames are drawn.
+- Faithful Ratio now retains the exact classic 160x144 viewport throughout the
+  party, summary and Kanto Ribbons screens instead of being replaced by the
+  responsive tall-phone or widescreen canvas.
+- Added regression coverage for a 360x800 portrait display, equal-height card
+  joins and stale responsive renderer sizes while Faithful Ratio is locked.
+
 ## 0.3.18 - 2026-08-23
 
 - Summary profiles now resolve the same `battle` front-sprite selection used

@@ -10,6 +10,8 @@ return function(mod, _, compatibility)
   local PaletteFX = require("src.render.PaletteFX")
   local PartyMenu = require("src.ui.PartyMenu")
   local Renderer = require("src.render.Renderer")
+  local faithfulLoaded, FaithfulRes = pcall(require, "src.core.FaithfulRes")
+  if not faithfulLoaded then FaithfulRes = nil end
   local Sprites = require("src.pokemon.Sprites")
 
   local exports = compatibility and compatibility.kantoRibbonsExports or {}
@@ -272,8 +274,17 @@ return function(mod, _, compatibility)
     end
   end
 
+  local function faithfulRatioActive()
+    if not (FaithfulRes and type(FaithfulRes.scaleCap) == "function") then
+      return false
+    end
+    local ok, cap = pcall(FaithfulRes.scaleCap)
+    return ok and cap ~= nil
+  end
+
   local function responsiveWidth()
     if not setting("responsive", true) then return 160 end
+    if faithfulRatioActive() then return 160 end
     local width, height
     if love.graphics.getPixelDimensions then
       width, height = love.graphics.getPixelDimensions()
@@ -290,7 +301,8 @@ return function(mod, _, compatibility)
   local function layoutFor(state)
     local width = responsiveWidth()
     local renderer = state and state.game and state.game.renderer
-    if setting("responsive", true) and renderer and renderer.uiSize then
+    if setting("responsive", true) and not faithfulRatioActive()
+        and renderer and renderer.uiSize then
       width = select(1, renderer:uiSize()) or width
     end
     width = math.max(160, math.floor(width))

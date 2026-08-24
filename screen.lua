@@ -13,6 +13,8 @@ return function(mod, genderExports, compatibility)
   local Sprites = require("src.pokemon.Sprites")
   local Renderer = require("src.render.Renderer")
   local Theme = require("src.ui.Theme")
+  local faithfulLoaded, FaithfulRes = pcall(require, "src.core.FaithfulRes")
+  if not faithfulLoaded then FaithfulRes = nil end
 
   local SCREEN_H = 144
   local HEADER_H = 16
@@ -114,8 +116,30 @@ return function(mod, genderExports, compatibility)
     return (constants and constants.partyMax) or DEFAULT_CAPACITY
   end
 
+  -- Faithful Ratio owns the final 160x144 viewport on mobile. Responsive
+  -- screens must not replace it with a taller canvas: the renderer can only
+  -- preserve the promised 10:9 Game Boy surface when the UI reports the same
+  -- native dimensions that the lock was calculated from.
+  local function faithfulRatioActive()
+    if not (FaithfulRes and type(FaithfulRes.scaleCap) == "function") then
+      return false
+    end
+    local ok, cap = pcall(FaithfulRes.scaleCap)
+    return ok and cap ~= nil
+  end
+
+  local function snapPortraitHeight(height)
+    -- Six equal native-pixel rows prevent alternating one-pixel joins. At a
+    -- 5x or 6x phone scale those joins otherwise become conspicuous bands.
+    local fixed = HEADER_H + 8 -- header plus footer
+    local snapped = height - ((height - fixed) % DEFAULT_CAPACITY)
+    if snapped >= PORTRAIT_MIN_H then return snapped end
+    return height
+  end
+
   local function responsiveWindowSize()
     if not setting("responsive", true) then return 160, SCREEN_H end
+    if faithfulRatioActive() then return 160, SCREEN_H end
     local width, height
     if love.graphics.getPixelDimensions then
       width, height = love.graphics.getPixelDimensions()
@@ -131,7 +155,7 @@ return function(mod, genderExports, compatibility)
     local portraitHeight = math.min(PORTRAIT_MAX_H,
       math.floor(height / portraitScale))
     if height >= width * 1.35 and portraitHeight >= PORTRAIT_MIN_H then
-      return 160, portraitHeight
+      return 160, snapPortraitHeight(portraitHeight)
     end
 
     -- Pick a scale that the complete classic surface can actually fit.
@@ -154,6 +178,7 @@ return function(mod, genderExports, compatibility)
     if not (setting("responsive", true) and type(menu) == "table") then
       return nil
     end
+    if faithfulRatioActive() then return nil end
     local stack = menu.game and menu.game.stack
     local states = stack and stack.states
     if type(states) ~= "table" then return nil end
@@ -195,7 +220,8 @@ return function(mod, genderExports, compatibility)
   local function layoutFor(menu)
     local width, height = responsiveSize(menu)
     local renderer = menu and menu.game and menu.game.renderer
-    if setting("responsive", true) and renderer and renderer.uiSize then
+    if setting("responsive", true) and not faithfulRatioActive()
+        and renderer and renderer.uiSize then
       local rendererW, rendererH = renderer:uiSize()
       width, height = rendererW or width, rendererH or height
     end
@@ -442,7 +468,14 @@ return function(mod, genderExports, compatibility)
     drawTextRight(label, layout.width - 4, 4, typeWidth, 1, WHITE)
   end
 
-  local function drawCardFrame(x, y, width, height, selected)
+  local function drawCardFrame(x, y, width, height, selected, seamless)
+    if seamless then
+      -- Portrait cards occupy the complete cell before their chamfered frame
+      -- is drawn. This hides the patterned backdrop on card join rows without
+      -- changing the frame, its palette zone, or any icon transparency mask.
+      gray(DARK)
+      love.graphics.rectangle("fill", x, y, width, height)
+    end
     -- Match Typed Move Colors' focus hierarchy. The selected card grows by a
     -- pixel on each side, uses a black outer frame, and raises its lighter
     -- face inside that frame. Its contents keep their original grid anchors,
@@ -598,7 +631,7 @@ return function(mod, genderExports, compatibility)
 
   local function drawEmptyCard(layout, index)
     local x, y, width, height = slotGeometry(layout, index)
-    drawCardFrame(x, y, width, height, false)
+    drawCardFrame(x, y, width, height, false, layout.portrait)
     drawText("EMPTY", x + 23, y + (height - 8) / 2,
       width - 30, 1, WHITE)
     gray(LIGHT)
@@ -1053,7 +1086,7 @@ return function(mod, genderExports, compatibility)
     local detailY = nameY + 10
     local hpY, expY = meterGeometry(x, y, width, height)
 
-    drawCardFrame(x, y, width, height, selected)
+    drawCardFrame(x, y, width, height, selected, layout.portrait)
 
     -- This is intentionally the engine helper rather than a direct image
     -- load. It resolves icons.bySpecies, pokemon.icon hooks, asset overrides,
