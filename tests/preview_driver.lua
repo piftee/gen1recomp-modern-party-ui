@@ -43,10 +43,94 @@ return function(game)
     U.wait(8)
     U.log("PASS icon animation is visible on the first Modern Party UI page")
     U.shot(game, DIR .. "/modern_party_ui_options_1.png")
-    options.index, options.scroll = 8, 4
+    options.index = #options.rows
+    options.scroll = math.max(0, #options.rows - 4)
     U.wait(8)
     U.log("PASS all remaining settings are on the Modern Party UI page")
     U.shot(game, DIR .. "/modern_party_ui_options_2.png")
+    return
+  end
+
+  if os.getenv("PREVIEW_PARTY_TOOLS") == "1" then
+    while game.stack:top() do game.stack:pop() end
+    local exports = game.mods and game.mods.exports
+      and game.mods.exports.modern_party_ui
+    local tools = exports and exports.partyTools
+    if not tools then
+      U.log("FAIL Modern Party UI party tools are unavailable")
+      return
+    end
+
+    -- These tools normally open above the responsive party screen and inherit
+    -- its logical width. Recreate that parent relationship in the standalone
+    -- preview so the capture does not fall back to the original 160px canvas.
+    local windowW, windowH = love.window.getMode()
+    local previewWidth, previewHeight
+    if windowH >= windowW * 1.35 then
+      local portraitScale = math.max(1, math.floor(windowW / 160))
+      previewWidth = 160
+      previewHeight = math.min(400, math.floor(windowH / portraitScale))
+      previewHeight = previewHeight - ((previewHeight - 24) % 6)
+    else
+      local previewScale = math.max(1,
+        math.floor(math.min(windowW / 160, windowH / 144)))
+      previewWidth = math.max(160, math.floor(windowW / previewScale))
+      previewHeight = 144
+    end
+    local previewParent = {
+      uiSize = function()
+        return previewWidth, previewHeight
+      end,
+    }
+
+    local NamingScreen = require("src.ui.NamingScreen")
+    local previewMon = Pokemon.new(game.data, "CHARIZARD", 36)
+    game.mods.modOptions = game.mods.modOptions or {}
+    game.mods.modOptions.modern_party_ui =
+      game.mods.modOptions.modern_party_ui or {}
+    game.mods.modOptions.modern_party_ui.rename_style = "classic"
+    local naming = NamingScreen.new(game, {
+      title = "RENAME?",
+      maxLen = 10,
+      default = "CHARIZARD",
+      onDone = function() end,
+    })
+    naming.glyphs = { "C", "H", "A", "R" }
+    tools.decorateNaming(naming, previewParent, previewMon)
+    game.stack:push(naming)
+    U.wait(8)
+    U.log("PASS modern Rename screen prepared")
+    U.shot(game, DIR .. "/modern_party_rename.png")
+
+    while game.stack:top() do game.stack:pop() end
+    game.mods.modOptions.modern_party_ui.rename_style = "modern"
+    naming = NamingScreen.new(game, {
+      title = "RENAME?",
+      maxLen = 10,
+      default = "CHARIZARD",
+      onDone = function() end,
+    })
+    naming.glyphs = { "C", "H", "A", "R" }
+    tools.decorateNaming(naming, previewParent, previewMon)
+    game.stack:push(naming)
+    U.wait(8)
+    U.log("PASS optional modern Rename screen prepared")
+    U.shot(game, DIR .. "/modern_party_rename_modern.png")
+
+    while game.stack:top() do game.stack:pop() end
+    local Menu = require("src.ui.Menu")
+    local relearn = Menu.new(game, {
+      { label = "EMBER", onSelect = function() end },
+      { label = "SMOKESCREEN", onSelect = function() end },
+      { label = "DRAGON RAGE", onSelect = function() end },
+      { label = "SLASH", onSelect = function() end },
+    }, { maxVisible = 4 })
+    relearn.index = 2
+    tools.decorateRelearn(relearn, previewParent)
+    game.stack:push(relearn)
+    U.wait(8)
+    U.log("PASS modern Relearn screen prepared")
+    U.shot(game, DIR .. "/modern_party_relearn.png")
     return
   end
 
@@ -126,4 +210,9 @@ return function(game)
   U.wait(8)
   U.log("PASS modern moves summary prepared")
   U.shot(game, DIR .. "/modern_party_summary_moves.png")
+  summary.modernMoveIndex = 2
+  summary.modernMoveDetail = true
+  U.wait(8)
+  U.log("PASS modern move details prepared")
+  U.shot(game, DIR .. "/modern_party_summary_move_detail.png")
 end

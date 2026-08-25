@@ -9,7 +9,7 @@ return {
       "Both Pokémon summary pages and their responsive information layout",
     },
     added = {
-      "Eight configurable presentation settings",
+      "Ten configurable presentation settings",
       "Widescreen party surfaces that expand to the available display width",
       "Full-height party targeting when opened from Modern Bag UI on portrait displays",
       "Visible empty party slots",
@@ -27,6 +27,10 @@ return {
       "True-colour protection for authored replacement menu icons",
       "Popup-safe full-colour icons and FOLLOW actions from Wilds of Kanto",
       "One dedicated Modern Party UI settings page inside the game's Options menu",
+      "Selectable move cards with type, class, power, accuracy and PP details",
+      "Responsive Rename and Relearn presentations for callback-backed QoL actions",
+      "Selected Rename styling for caught, received and gifted Pokémon nickname prompts",
+      "Original, installed menu-pack and follower-pack icon source choices",
     },
     known = {
       "Uses the engine_internals permission to retain the complete built-in party controller",

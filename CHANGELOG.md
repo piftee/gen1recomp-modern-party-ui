@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0 - 2026-08-25
+
+- Move cards on the Pokémon summary are now selectable. Press A on a learned
+  move to open a responsive detail card showing its type, damage class, power,
+  accuracy and current/max PP; B returns to the four-card move list.
+- Rename and Relearn actions contributed by compatible QoL mods now open in
+  cohesive Modern Party UI presentations while their original callbacks,
+  naming rules and move-learning controllers remain in charge.
+- Rename now shows the selected Pokémon's active compatible menu sprite. A
+  RENAME STYLE setting keeps the faithful Gen 1 keyboard as the default and
+  restores the earlier responsive Modern Party UI button grid as an option.
+  Both styles keep case, DEL and END together on an arrow-navigable bottom
+  command row, with A activating whichever command is selected.
+- The selected Rename style now also applies when naming a newly caught,
+  received or gifted Pokémon, including Pokémon sent directly to a Box.
+  Player and rival naming screens keep their original presentation.
+- Added an ICON SOURCE setting with Auto, Original, Menu Pack and Follower Pack
+  choices. It composes with the existing ICON ANIMATION switch and gives
+  players an explicit fallback when several sprite providers are installed.
+- Expanded the compatibility suite to cover source selection, move-detail
+  navigation and callback-backed Anytime Rename/QoL Toggles flows.
+- Naming screens now clear inherited UI-only true-colour claims before drawing,
+  preventing the same grey rectangles previously fixed on summary screens.
+
 ## 0.3.21 - 2026-08-24
 
 - Large SGB summary portraits using the pale red, yellow, or brown monster

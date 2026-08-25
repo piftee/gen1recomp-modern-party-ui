@@ -17,6 +17,11 @@ return function(mod)
     -- control both easy to miss and unclear about what it changed.
     { key = "animate_icons", label = "ICON ANIMATION", type = "toggle",
       default = true },
+    { key = "sprite_source", label = "ICON SOURCE", type = "choice",
+      default = "auto", choices = {
+        { "AUTO", "auto" }, { "ORIGINAL", "original" },
+        { "MENU PACK", "menu_pack" }, { "FOLLOWER PACK", "follower_pack" },
+      } },
     { key = "hp_text", label = "HP DISPLAY", type = "choice",
       default = "bar", choices = {
         { "VALUES", "values" }, { "PERCENT", "percent" },
@@ -37,12 +42,16 @@ return function(mod)
       } },
     { key = "responsive", label = "WIDESCREEN", type = "toggle",
       default = true },
+    { key = "rename_style", label = "RENAME STYLE", type = "choice",
+      default = "classic", choices = {
+        { "CLASSIC", "classic" }, { "MODERN", "modern" },
+      } },
   }
   mod.options:define(optionSchema)
 
   -- Expose the schema through one entry in the game's ordinary OPTIONS
   -- screen. Activating it opens a dedicated Options-style page containing
-  -- every Modern Party UI setting, rather than appending eight loose rows to
+  -- every Modern Party UI setting, rather than appending loose rows to
   -- an already-long main list. The mod manager remains the canonical owner.
   local function setOption(game, key, value)
     local options = game and game.save and game.save.options
@@ -183,6 +192,17 @@ return function(mod)
 
   local record = loadScreen("screen.lua", "party")
   if not record then return end
+  -- Party-owned child screens (Rename and Relearn) can ask the card renderer
+  -- for the same source-aware icon treatment as the roster itself. Keeping
+  -- this bridge on the screen record avoids copying the compatibility stack
+  -- into every child presenter.
+  mod.exports.drawPartyToolIcon = record.drawToolIcon
+  local partyTools = loadScreen("party_tools.lua", "party tools")
+  if not partyTools then return end
+  partyTools.install()
+  -- Public presentation helpers let companion mods and the visual preview
+  -- harness opt into the same Rename/Relearn styling without copying it.
+  mod.exports.partyTools = partyTools
 
   -- Screen records are presentation ownership, not controller inheritance.
   -- A compatibility mod may already have registered a classic PartyMenu or
@@ -200,6 +220,13 @@ return function(mod)
     return false
   end
 
+  -- Keep any earlier player/rival naming provider as the downstream factory.
+  -- partyTools decorates only the Pokémon-specific NICKNAME? prompt, which
+  -- lets wild catches, starters and scripted gifts share the selected Rename
+  -- style without changing the game's other naming sequences.
+  local inheritedNaming = mod.content.screens:get("NamingScreen")
+  local nicknameRecord = partyTools.namingScreenRecord(inheritedNaming)
+  local replacedNaming = installScreen("NamingScreen", nicknameRecord)
   local replacedParty = installScreen("PartyMenu", record)
   local summary = loadScreen("summary.lua", "summary")
   if not summary then return end
@@ -258,23 +285,7 @@ return function(mod)
   -- canSuppressNative=false keeps Modern Party UI's responsive renderer in
   -- charge and leaves all controller input source-owned.
   local function isModernPartyNamingScreen(state)
-    if type(state) ~= "table" or state.screenId ~= "NamingScreen" then
-      return false
-    end
-    local game = state.game
-    local states = game and game.stack and game.stack.states
-    if type(states) ~= "table" then return false end
-
-    -- NamingScreen is pushed above PartyMenu by QoL Toggles (and compatible
-    -- rename actions). Only claim that child transition; ordinary Name Rater,
-    -- starter and player naming screens remain available to Gen1 Modern UI.
-    for index = #states, 2, -1 do
-      if states[index] == state then
-        local parent = states[index - 1]
-        return type(parent) == "table" and parent.modernPartyUI == true
-      end
-    end
-    return false
+    return type(state) == "table" and state.modernPartyNaming == true
   end
 
   mod.exports.gen1ModernUi = {
@@ -349,7 +360,26 @@ return function(mod)
             title = state.title or "NICKNAME?",
             rows = {},
             index = 1,
-            footer = { "NamingScreen remains source-owned" },
+            footer = { "Modern Party UI presentation" },
+          }
+        end,
+        layer = "screen",
+        canSuppressNative = false,
+      },
+      ModernPartyRelearn = {
+        match = function(state)
+          return type(state) == "table" and state.modernPartyRelearn == true
+        end,
+        model = function(_, state)
+          local rows = {}
+          for _, item in ipairs(state.items or {}) do
+            rows[#rows + 1] = { label = item.label or item.name or "MOVE" }
+          end
+          return {
+            title = "RELEARN",
+            rows = rows,
+            index = state.index or 1,
+            footer = { "Modern Party UI presentation" },
           }
         end,
         layer = "screen",
@@ -398,7 +428,7 @@ return function(mod)
     or ""
   mod.log:info(
     "modern party roster and summary enabled%s " ..
-      "(replaced records: %s/%s/%s)",
+      "(replaced records: %s/%s/%s/%s)",
     suffix, tostring(replacedParty), tostring(replacedSummary),
-    tostring(replacedRibbons))
+    tostring(replacedRibbons), tostring(replacedNaming))
 end

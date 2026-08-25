@@ -836,20 +836,81 @@ return function(mod, genderExports, compatibility)
     return x, y, x2 - x, y2 - y
   end
 
+  local function selectedMove(summary)
+    local index = math.max(1, math.min(4,
+      tonumber(summary.modernMoveIndex) or 1))
+    local move = (summary.mon.moves or {})[index]
+    local def = move and summary.game.data.moves[move.id]
+    return move, def, index
+  end
+
+  local function moveCategory(def)
+    if not def then return "---" end
+    if tonumber(def.power) == 0 then return "STATUS" end
+    local category = def.category or TypeChart.category(def.type)
+    category = tostring(category or "---"):upper()
+    if category == "PHYSICAL" then return "PHYSICAL" end
+    if category == "SPECIAL" then return "SPECIAL" end
+    return category
+  end
+
+  local function drawMoveDetail(summary, layout)
+    local move, def = selectedMove(summary)
+    local x, y = layout.mainX, layout.mainY + 40
+    local w, h = layout.mainW, layout.mainH - 40
+    drawCard(x, y, w, h, false)
+    if not (move and def) then
+      drawTextCentered("EMPTY MOVE SLOT", x + 5,
+        y + math.floor((h - 8) / 2), w - 10, WHITE)
+      return
+    end
+
+    local maxPP = (def.pp or 0)
+      + (move.ppUps or 0) * math.floor((def.pp or 0) / 5)
+    local typeName = TypeChart.displayName(def.type or "NORMAL") or "---"
+    local accuracy = tonumber(def.accuracy)
+    local rows = {
+      { "TYPE", tostring(typeName):upper() },
+      { "CLASS", moveCategory(def) },
+      { "POWER", tonumber(def.power) == 0 and "---"
+          or tostring(math.floor(tonumber(def.power) or 0)) },
+      { "ACCURACY", accuracy and (tostring(math.floor(accuracy)) .. "%")
+          or "---" },
+      { "PP", ("%d/%d"):format(move.pp or 0, maxPP) },
+    }
+    drawTextCentered(def.name or move.id, x + 5, y + 5, w - 10, WHITE)
+    local firstY = y + 20
+    local rowH = math.max(10, math.floor((h - 24) / #rows))
+    for i, row in ipairs(rows) do
+      local rowY = firstY + (i - 1) * rowH
+      drawText(row[1], x + 7, rowY, math.floor(w * 0.48), WHITE)
+      drawTextRight(row[2], x + w - 7, rowY,
+        math.floor(w * 0.48), WHITE)
+    end
+  end
+
   local function drawMoves(summary, layout)
+    if summary.modernMoveDetail then
+      drawMoveDetail(summary, layout)
+      return
+    end
     local moves = summary.mon.moves or {}
+    local selectedIndex = math.max(1, math.min(4,
+      tonumber(summary.modernMoveIndex) or 1))
     for i = 1, 4 do
       local x, y, w, h = moveGeometry(layout, i)
-      drawCard(x, y, w, h, false)
+      local selected = i == selectedIndex
+      drawCard(x, y, w, h, selected)
       local move = moves[i]
       local def = move and summary.game.data.moves[move.id]
       if not (move and def) then
         drawTextCentered("EMPTY", x + 5, y + math.floor((h - 8) / 2),
-          w - 10, WHITE)
+          w - 10, selected and BLACK or WHITE)
       else
         local name = fitText(def.name or move.id, w - 10)
         local nameY = y + math.floor((h - 17) / 2)
-        drawTextCentered(name, x + 5, nameY, w - 10, WHITE)
+        drawTextCentered(name, x + 5, nameY, w - 10,
+          selected and BLACK or WHITE)
         local typeName = TYPE_SHORT[tostring(def.type or "NORMAL"):upper()]
           or "---"
         local maxPP = (def.pp or 0)
@@ -860,9 +921,9 @@ return function(mod, genderExports, compatibility)
         local detailX = x + math.floor((w - detailWidth) / 2)
         local detailY = nameY + 9
         local typeWidth = drawText(typeName, detailX, detailY,
-          Font.width(typeName), WHITE)
+          Font.width(typeName), selected and BLACK or WHITE)
         drawText(pp, detailX + typeWidth + gap, detailY,
-          Font.width(pp), WHITE)
+          Font.width(pp), selected and BLACK or WHITE)
       end
     end
   end
@@ -1021,8 +1082,14 @@ return function(mod, genderExports, compatibility)
     local hint
     if summary.page == 1 then
       hint = "A/B MOVES"
+    elseif summary.page == 2 and summary.modernMoveDetail then
+      hint = "A/B BACK"
+    elseif summary.page == 2 and kantoRibbons then
+      hint = "ARROWS  A INFO  B RIBBONS"
     elseif summary.page == 2 and dvTracker then
-      hint = "A/B DVS"
+      hint = "ARROWS  A INFO  B DVS"
+    elseif summary.page == 2 then
+      hint = "ARROWS  A INFO  B BACK"
     elseif kantoRibbons then
       hint = "A/B RIBBONS"
     else
@@ -1099,12 +1166,21 @@ return function(mod, genderExports, compatibility)
         colors = exp, x = layout.mainX + 5, y = layout.mainY + 28,
         w = layout.mainW - 10, h = 6,
       }
-      for i, move in ipairs(summary.mon.moves or {}) do
-        if i > 4 then break end
-        local x, y, w, h = moveGeometry(layout, i)
+      if summary.modernMoveDetail then
+        local move = selectedMove(summary)
         zones[#zones + 1] = {
-          colors = movePalette(summary, move), x = x, y = y, w = w, h = h,
+          colors = movePalette(summary, move),
+          x = layout.mainX, y = layout.mainY + 40,
+          w = layout.mainW, h = layout.mainH - 40,
         }
+      else
+        for i, move in ipairs(summary.mon.moves or {}) do
+          if i > 4 then break end
+          local x, y, w, h = moveGeometry(layout, i)
+          zones[#zones + 1] = {
+            colors = movePalette(summary, move), x = x, y = y, w = w, h = h,
+          }
+        end
       end
     else
       zones[#zones + 1] = {
@@ -1118,12 +1194,59 @@ return function(mod, genderExports, compatibility)
   return {
     new = function(game, mon)
       local summary = SummaryMenu.new(game, mon)
+      local downstreamUpdate = summary.update
       -- Resolve through the same live sprite hook used by SummaryMenu so the
       -- matte mask follows asset replacements rather than a private copy.
       summary.modernSpritePath = Sprites.path(game.data, mon.species, "front",
         { mon = mon, kind = "battle" })
       summary.modernBattleSpritePath = summary.modernSpritePath
       summary.modernSpriteSpecies = mon.species
+      summary.modernMoveIndex = 1
+      summary.modernMoveDetail = false
+      summary.update = function(self, dt)
+        local input = self.game and self.game.input
+        if self.page ~= 2 then
+          self.modernMoveDetail = false
+          return downstreamUpdate(self, dt)
+        end
+        if not (input and type(input.wasPressed) == "function") then
+          return downstreamUpdate(self, dt)
+        end
+        if self.modernMoveDetail then
+          if input:wasPressed("a") or input:wasPressed("b") then
+            self.modernMoveDetail = false
+          end
+          return
+        end
+
+        local columns = layoutFor(self).moveColumns
+        local index = math.max(1, math.min(4,
+          tonumber(self.modernMoveIndex) or 1))
+        if input:wasPressed("left") then
+          index = columns == 1 and index
+            or (index % columns == 1 and index + columns - 1 or index - 1)
+        elseif input:wasPressed("right") then
+          index = columns == 1 and index
+            or (index % columns == 0 and index - columns + 1 or index + 1)
+        elseif input:wasPressed("up") then
+          index = index - columns
+          if index < 1 then index = index + 4 end
+        elseif input:wasPressed("down") then
+          index = index + columns
+          if index > 4 then index = index - 4 end
+        elseif input:wasPressed("a") then
+          local move = (self.mon.moves or {})[index]
+          if move and self.game.data.moves[move.id] then
+            self.modernMoveDetail = true
+          end
+          return
+        else
+          -- B still belongs to the original controller: it closes the
+          -- summary or advances into DV/Ribbons pages supplied by other mods.
+          return downstreamUpdate(self, dt)
+        end
+        self.modernMoveIndex = math.max(1, math.min(4, index))
+      end
       summary.draw = draw
       summary.sgbPalettes = sgbPalettes
       summary.uiSize = uiSize

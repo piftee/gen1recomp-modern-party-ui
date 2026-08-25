@@ -72,7 +72,7 @@ local run = T.sdk.loadMod("mods/modern_party_ui", { data = data, dev = true })
 T.eq(#run.errors, 0, "loads clean (" .. tostring(run.errors[1]) .. ")")
 
 local schema = run.loader.optionSchemas.modern_party_ui or {}
-T.eq(#schema, 8, "all eight presentation settings are registered")
+T.eq(#schema, 10, "all ten presentation settings are registered")
 T.eq(run.loader.modOptions.modern_party_ui, nil,
   "defaults require no persisted option bucket")
 
@@ -93,7 +93,7 @@ T.eq(mainOptionRows[2].value(optionGame), "OPEN",
   "the consolidated entry clearly indicates that it opens a page")
 mainOptionRows[2].activate(optionGame)
 local partyOptionRows = optionGame.stack.page and optionGame.stack.page.rows or {}
-T.eq(#partyOptionRows, 8,
+T.eq(#partyOptionRows, 10,
   "the dedicated Modern Party UI page contains every presentation setting")
 T.eq(partyOptionRows[1].id, "modern_party_ui_card_color",
   "the dedicated page starts with party colour")
@@ -111,13 +111,27 @@ T.eq(partyOptionRows[2].label, "ICON ANIMATION",
   "the animation control has an explicit player-facing label")
 T.eq(partyOptionRows[2].value(optionGame), "ON",
   "icon animation is enabled by default")
-T.eq(partyOptionRows[4].id, "modern_party_ui_exp_text",
+T.eq(partyOptionRows[3].id, "modern_party_ui_sprite_source",
+  "the installed sprite source can be selected explicitly")
+T.eq(partyOptionRows[3].value(optionGame), "AUTO",
+  "sprite packs compose automatically by default")
+partyOptionRows[3].step(optionGame, 1)
+T.eq(run.loader.modOptions.modern_party_ui.sprite_source, "original",
+  "the sprite source selector exposes the original game artwork")
+T.eq(partyOptionRows[5].id, "modern_party_ui_exp_text",
   "the EXP display has its own row on the dedicated page")
-T.eq(partyOptionRows[4].value(optionGame), "PERCENT",
+T.eq(partyOptionRows[5].value(optionGame), "PERCENT",
   "the EXP display defaults to a useful percentage")
-partyOptionRows[4].step(optionGame, -1)
+partyOptionRows[5].step(optionGame, -1)
 T.eq(run.loader.modOptions.modern_party_ui.exp_text, "values",
   "the EXP display cycles independently through its configured modes")
+T.eq(partyOptionRows[10].id, "modern_party_ui_rename_style",
+  "the dedicated settings page contains the Rename style selector")
+T.eq(partyOptionRows[10].value(optionGame), "CLASSIC",
+  "the faithful Rename layout remains the default")
+partyOptionRows[10].step(optionGame, 1)
+T.eq(run.loader.modOptions.modern_party_ui.rename_style, "modern",
+  "the earlier modern Rename layout can be restored from Options")
 run.loader.modOptions.modern_party_ui = nil
 end
 
@@ -170,6 +184,50 @@ T.eq(screen.animateTo, PartyMenu.animateTo,
   "the original medicine animation behavior is retained")
 T.eq(screen:bottomMessage(), "Choose a POKéMON.",
   "the original contextual prompt is retained")
+
+-- The same presentation also owns ordinary Pokémon nickname prompts after
+-- catches and scripted gifts. Player/rival naming remains downstream-owned.
+do
+  local originalParty = game.save.party
+  local originalBuffer = game.stringBuffer
+  local caught = mon("FIXMON_B", nil, 9, 24, 24)
+  stack.states = { { enemy = { mon = caught } } }
+  require("src.ui.Screens").invalidate()
+  local caughtNaming = require("src.ui.Screens").push(game, "NamingScreen", {
+    title = "NICKNAME?", maxLen = 10,
+    onDone = function(name) caught.nickname = name end,
+  })
+  T.eq(caughtNaming.modernPartyNaming, true,
+    "a caught Pokémon nickname prompt receives the selected Rename style")
+  T.eq(caughtNaming.modernPartyNamingMon, caught,
+    "the caught battle model supplies the nickname-screen portrait")
+  caughtNaming.onDone("SPARK")
+  T.eq(caught.nickname, "SPARK",
+    "the catch nickname completion callback remains source-owned")
+
+  local gift = mon("FIXMON_C", nil, 5, 18, 18)
+  game.save.party = { party[1], gift }
+  game.stringBuffer = game.data.pokemon.FIXMON_C.name
+  stack.states = {}
+  local giftNaming = require("src.ui.Screens").push(game, "NamingScreen", {
+    title = "NICKNAME?", maxLen = 10,
+  })
+  T.eq(giftNaming.modernPartyNaming, true,
+    "a received Pokémon nickname prompt receives the selected Rename style")
+  T.eq(giftNaming.modernPartyNamingMon, gift,
+    "a newly appended gift supplies the nickname-screen portrait")
+
+  stack.states = {}
+  local playerNaming = require("src.ui.Screens").push(game, "NamingScreen", {
+    title = "YOUR NAME?", maxLen = 7,
+  })
+  T.eq(playerNaming.modernPartyNaming, nil,
+    "player naming remains untouched by the Pokémon nickname presenter")
+
+  stack.states = {}
+  game.save.party = originalParty
+  game.stringBuffer = originalBuffer
+end
 
 -- Responsive sizing uses as much integer-scaled horizontal room as the
 -- current window permits, and collapses to the classic surface by setting.
@@ -259,7 +317,7 @@ local realDrawIcon = PartyMenu.drawIcon
 local iconCalls = {}
 local trueColorMarks = {}
 local fractionalScales = {}
-local iconBackgrounds = {}
+local iconComposites = {}
 local cardLayers = {}
 local drawnText = {}
 local realMarkTrueColor = PaletteFX.markTrueColor
@@ -280,9 +338,11 @@ graphics.scale = function(x, y)
   fractionalScales[#fractionalScales + 1] = { x = x, y = y }
 end
 graphics.rectangle = function(mode, x, y, w, h)
-  if mode == "fill" and w == 18 and h == 18 then
+  if mode == "fill" and w == 16 and h == 16 then
     local r, g, b = graphics.getColor()
-    iconBackgrounds[#iconBackgrounds + 1] = { r = r, g = g, b = b }
+    iconComposites[#iconComposites + 1] = {
+      x = x, y = y, w = w, h = h, r = r, g = g, b = b,
+    }
   end
   return realRectangle(mode, x, y, w, h)
 end
@@ -320,18 +380,21 @@ T.eq(iconCalls[1].x, 5,
   "the compact icon is horizontally centered in its available column")
 T.eq(iconCalls[1].y, 21,
   "the icon is vertically centered above the meter rows")
-T.eq(#trueColorMarks, 16,
-  "authored replacement icons protect opaque rows instead of full canvases")
+T.eq(#trueColorMarks, 2,
+  "authored replacement icons publish one stable composite per card")
 T.eq(trueColorMarks[1].x, 5,
-  "true-colour protection starts at the icon's opaque pixels")
+  "true-colour protection starts at the integer-aligned icon well")
 T.eq(trueColorMarks[1].y, 21,
-  "opaque-row protection follows its responsive card row")
-T.eq(trueColorMarks[1].w, 8,
-  "the headless icon mask protects only its decoded opaque width")
-T.eq(trueColorMarks[1].h, 1,
-  "true-colour protection is split into individual opaque rows")
-T.eq(#iconBackgrounds, 0,
-  "replacement icon transparency never receives a rectangular backing")
+  "the stable composite follows its responsive card row")
+T.eq(trueColorMarks[1].w, 16,
+  "the stable composite covers the complete native icon well")
+T.eq(trueColorMarks[1].h, 16,
+  "the icon well is restored as one Android-safe rectangle")
+T.eq(#iconComposites, 2,
+  "replacement icons are baked onto their final card face before restore")
+T.check(iconComposites[1].r ~= iconComposites[1].g
+    or iconComposites[1].g ~= iconComposites[1].b,
+  "the selected icon backing uses the final coloured card face, not grey")
 T.eq(cardLayers[2].color[1], 0,
   "the selected party card uses a dominant black outer frame")
 T.eq(cardLayers[2].points[1], 4,
@@ -373,6 +436,32 @@ T.check(originalModeOK,
 T.eq(#originalModeMarks, 0,
   "Unique Menu Icons 1.5.0 ORIGINAL art remains card-palette aware")
 
+-- Child screens such as Rename use the compact icon bridge rather than a
+-- party card. Some palette-aware packs claim their source-sheet coordinates
+-- as true-colour regions; those claims must not be replayed onto the naming
+-- surface as grey blocks.
+local drawPartyToolIcon = run.loader.exports.modern_party_ui.drawPartyToolIcon
+PartyMenu.drawIcon = function(_, _, x, y)
+  PaletteFX.markTrueColor(x + 96, y + 32, 8, 8)
+  return true
+end
+local namingBridgeMarks = {}
+PaletteFX.markTrueColor = function(x, y, w, h)
+  namingBridgeMarks[#namingBridgeMarks + 1] = {
+    x = x, y = y, w = w, h = h,
+  }
+end
+local namingBridgeOK, namingBridgeErr = pcall(drawPartyToolIcon,
+  game, party[1], 8, 12, {
+    size = 16, selected = true,
+    background = { 130, 145, 235 },
+  })
+T.check(namingBridgeOK,
+  "palette-aware naming portrait draws: " .. tostring(namingBridgeErr))
+T.eq(#namingBridgeMarks, 0,
+  "palette-aware naming portraits discard source-sheet colour claims")
+PartyMenu.drawIcon = function() return true end
+
 game.data.icons.bySpecies.FIXMON_A =
   uniqueEntry("icon_color", "FIXMON_A")
 local savedImageData = Assets.imageData
@@ -399,12 +488,12 @@ Assets.imageData = savedImageData
 T.check(colorModeOK,
   "Unique Menu Icons 1.5.0 UNIQUE COLORS mode draws: "
     .. tostring(colorModeErr))
-T.eq(#colorModeMarks, 4,
-  "Unique Menu Icons colour art protects only its opaque runs")
-T.eq(colorModeMarks[1].x, 9,
-  "Unique Menu Icons transparent left padding is not restored")
-T.eq(colorModeMarks[1].w, 4,
-  "Unique Menu Icons does not publish its full transparent canvas")
+T.eq(#colorModeMarks, 2,
+  "Unique Menu Icons colour art publishes one stable composite per card")
+T.eq(colorModeMarks[1].x, 5,
+  "Unique Menu Icons protection stays aligned to the card's icon well")
+T.eq(colorModeMarks[1].w, 16,
+  "Unique Menu Icons uses the full face-coloured composite well")
 
 game.data.icons.bySpecies = savedEntries
 PartyMenu.drawIcon = savedDrawIcon
@@ -464,12 +553,12 @@ end
 local hpOverlay, expOverlay
 for _, call in ipairs(drawnText) do
   if call.text == "45/45" then hpOverlay = call end
-  if call.y == 47 and call.text:match("^%d+$") then expOverlay = call end
+  if call.y == 46 and call.text:match("^%d+$") then expOverlay = call end
 end
-T.check(hpOverlay and hpOverlay.y == 39,
-  "configured HP values draw directly over the first HP meter")
+T.check(hpOverlay and hpOverlay.y == 38,
+  "configured HP values draw over the first HP meter with bottom padding")
 T.check(expOverlay ~= nil,
-  "the configured EXP percentage draws directly over the EXP meter")
+  "the configured EXP percentage keeps one pixel clear of the card frame")
 
 -- The renderer restores true-colour icon rectangles after palette work. An
 -- icon beneath the centered action menu must not restore the underlying card
@@ -489,8 +578,8 @@ PartyMenu.drawIcon = realDrawIcon
 PaletteFX.markTrueColor = realMarkTrueColor
 T.check(modalOK,
   "the action menu draws with colour-icon clipping: " .. tostring(modalErr))
-T.eq(#modalMarks, 8,
-  "only the opaque rows of an uncovered replacement icon are restored")
+T.eq(#modalMarks, 1,
+  "only the uncovered stable icon composite is restored around the popup")
 local popup = { x = 20, y = 48, w = 122, h = 42 }
 for _, rect in ipairs(modalMarks) do
   local overlaps = rect.x < popup.x + popup.w
@@ -550,6 +639,57 @@ T.check(spriteOK, "a companion mod's icon draws: " .. tostring(spriteErr))
 T.check(drawnPaths["mods/companion_sprite_pack/assets/fixmon_a_icon.png"] == true,
   "icons.bySpecies replacement art is resolved instead of a private asset")
 
+-- ICON SOURCE can bypass the live provider chain for a dependable original
+-- presentation, or return to the installed menu-pack provider explicitly.
+do
+local savedByDex = game.data.icons.byDex
+local savedIcons = game.data.icons.icons
+local savedDrawIcon = PartyMenu.drawIcon
+local savedGraphicsDraw = graphics.draw
+game.data.icons.byDex = {
+  [1] = "FIX_ORIGINAL_A", [2] = "FIX_ORIGINAL_B",
+  [3] = "FIX_ORIGINAL_C",
+}
+game.data.icons.icons = {
+  FIX_ORIGINAL_A = "tests/fixture_data/assets/fixmon_a_front.png",
+  FIX_ORIGINAL_B = "tests/fixture_data/assets/fixmon_b_front.png",
+  FIX_ORIGINAL_C = "tests/fixture_data/assets/fixmon_c_front.png",
+}
+local providerCalls, originalPaths = 0, {}
+PartyMenu.drawIcon = function()
+  providerCalls = providerCalls + 1
+  return true
+end
+graphics.draw = function(image, ...)
+  if type(image) == "table" and image.path then
+    originalPaths[image.path] = true
+  end
+  return savedGraphicsDraw(image, ...)
+end
+run.loader.modOptions.modern_party_ui = { sprite_source = "original" }
+local originalSourceOK, originalSourceErr = pcall(screen.draw, screen)
+T.check(originalSourceOK,
+  "the original sprite source draws: " .. tostring(originalSourceErr))
+T.eq(providerCalls, 0,
+  "the original sprite source bypasses installed party icon providers")
+T.check(originalPaths["tests/fixture_data/assets/fixmon_a_front.png"] == true,
+  "the original sprite source resolves the dex-indexed game artwork")
+
+providerCalls = 0
+run.loader.modOptions.modern_party_ui = { sprite_source = "menu_pack" }
+local menuSourceOK, menuSourceErr = pcall(screen.draw, screen)
+T.check(menuSourceOK,
+  "the installed menu sprite source draws: " .. tostring(menuSourceErr))
+T.eq(providerCalls, #party,
+  "the menu sprite source uses the shared installed-provider seam")
+
+run.loader.modOptions.modern_party_ui = nil
+graphics.draw = savedGraphicsDraw
+PartyMenu.drawIcon = savedDrawIcon
+game.data.icons.byDex = savedByDex
+game.data.icons.icons = savedIcons
+end
+
 -- Classic width is two columns. Directional input moves geometrically and
 -- is then masked from the original one-dimensional navigation for that tick.
 local function press(key)
@@ -580,6 +720,10 @@ T.eq(zones[3].x, 23,
   "the first HP bar aligns with the compact card's text column")
 T.eq(zones[4].x, zones[3].x,
   "the EXP bar aligns directly below the HP bar")
+T.eq(zones[3].y, 39,
+  "the HP palette follows the one-pixel padded meter stack")
+T.eq(zones[4].y, 47,
+  "the EXP palette follows the one-pixel padded lower row")
 T.eq(zones[4].colors, run.data.palettes.palettes.EXP,
   "every EXP bar uses the dedicated blue palette")
 local function exactBase(zone, rgb)
@@ -650,8 +794,8 @@ T.eq(summary.modernSummaryLayout, "responsive_cards",
   "the summary identifies its adaptive card layout")
 T.eq(getmetatable(summary), SummaryMenu,
   "the summary keeps the original SummaryMenu controller")
-T.eq(summary.update, SummaryMenu.update,
-  "native page switching and closing behavior remain unchanged")
+T.check(type(summary.update) == "function",
+  "the selectable move page installs an input adapter")
 
 graphics.getPixelDimensions = function() return 1600, 845 end
 T.eq(select(1, summary:uiSize()), 320,
@@ -826,6 +970,7 @@ end
 -- Unique Menu Icons publishes fixed party-row true-colour rectangles.  A
 -- PartyMenu -> SummaryMenu transition may happen during the same frame, so
 -- the opaque summary must replace those claims with its own artwork claim.
+PaletteFX.clearTrueColor()
 PaletteFX.setPass("ui")
 for i = 1, 6 do PaletteFX.markTrueColor(8, i * 16 - 8, 16, 16) end
 T.eq(#PaletteFX.trueColorRects("ui"), 6,
@@ -843,8 +988,8 @@ T.check(not (summaryTrueColor[1].x == 8
 PaletteFX.clearTrueColor()
 
 -- Anytime Rename 1.2.1 injects a callback-backed NICKNAME party action.
--- Modern Party UI must leave that action and its native NamingScreen stack
--- transition intact rather than interpreting it as a presentation command.
+-- Its native controller remains intact while Modern Party UI decorates the
+-- child screen after the source callback pushes it.
 do
 local renameData = T.fixtures.fresh()
 renameData.icons = data.icons
@@ -879,6 +1024,10 @@ T.check(renameOK,
   "the NICKNAME action opens without freezing: " .. tostring(renameErr))
 T.eq(renameStack.states[1] and renameStack.states[1].screenId,
   "NamingScreen", "the native naming screen is pushed onto the game stack")
+T.eq(renameStack.states[1] and renameStack.states[1].modernPartyNaming, true,
+  "Anytime Rename receives the cohesive party naming presentation")
+T.eq(renameStack.states[1] and renameStack.states[1].modernPartyNamingMon,
+  party[1], "Rename keeps the selected Pokémon for its portrait")
 renameRun.release()
 end
 
@@ -908,6 +1057,9 @@ local renameGame = {
   input = { wasPressed = function() return false end },
 }
 local roster = renameRun.data.screens.PartyMenu.new(renameGame, {})
+-- The real party surface is wider on this desktop fixture. The child tools
+-- must own that same canvas instead of being re-centred as classic screens.
+roster.uiSize = function() return 204, 144 end
 renameStack:push(roster)
 local renameItems = Runtime.call("ui.party.submenu",
   function(_, items) return items end,
@@ -925,8 +1077,145 @@ local naming = renameStack.states[#renameStack.states]
 T.eq(naming and naming.screenId, "NamingScreen",
   "QoL Toggles pushes the native naming screen above the modern party")
 local modernUi = renameRun.loader.exports.gen1_modern_ui
+T.eq(naming.modernPartyNaming, true,
+  "the party child NamingScreen receives the cohesive presentation")
+T.eq(naming.modernPartyNamingMon, party[1],
+  "the party child NamingScreen displays the Pokémon being renamed")
+T.eq(naming:isWideBattleLayout(), true,
+  "the naming screen owns its inherited responsive surface")
+local namingZones = naming:sgbPalettes(renameGame)
+T.eq(namingZones[1].w, 204,
+  "the naming palette covers the full responsive width")
+T.eq(namingZones[1].h, 144,
+  "the naming palette preserves the responsive aspect surface")
+roster.uiSize = function() return 160, 396 end
+T.eq(select(1, naming:uiSize()), 160,
+  "the naming screen inherits the faithful narrow width")
+T.eq(select(2, naming:uiSize()), 396,
+  "the naming screen inherits the portrait height without stretching")
+roster.uiSize = function() return 204, 144 end
 T.eq(modernUi.shouldSuppress(naming), false,
-  "Gen1 Modern UI leaves the party child NamingScreen source-owned")
+  "Gen1 Modern UI leaves the styled party NamingScreen source-owned")
+local namingOK, namingErr = pcall(naming.draw, naming)
+T.check(namingOK,
+  "the responsive party naming presentation draws: " .. tostring(namingErr))
+renameRun.loader.modOptions.modern_party_ui = {
+  rename_style = "modern",
+}
+local namingPressed = {}
+renameGame.input.wasPressed = function(_, key)
+  return namingPressed[key] == true
+end
+local function pressNaming(key)
+  namingPressed[key] = true
+  naming:update(0)
+  namingPressed[key] = nil
+end
+local namingGrid = naming:grid()
+local namingCaseRow = #namingGrid
+naming.row, naming.col = namingCaseRow, 1
+pressNaming("right")
+T.eq(naming.modernPartyNamingCommand, "delete",
+  "RIGHT from case reaches the visible DEL button")
+naming.glyphs = { "A" }
+pressNaming("a")
+T.eq(#naming.glyphs, 0,
+  "A on the visible DEL button erases one entered character")
+pressNaming("right")
+T.eq(naming.modernPartyNamingCommand, "end",
+  "RIGHT from DEL reaches the visible END button")
+pressNaming("left")
+T.eq(naming.modernPartyNamingCommand, "delete",
+  "LEFT from END returns to the visible DEL button")
+pressNaming("left")
+T.eq(naming.modernPartyNamingCommand, "case",
+  "LEFT from DEL returns to the case button")
+pressNaming("down")
+T.eq(naming.modernPartyNamingCommand, nil,
+  "DOWN from the command row returns to the letter grid")
+T.eq(naming.row, 1,
+  "the command row wraps down to the first letter row")
+pressNaming("up")
+T.eq(naming.modernPartyNamingCommand, "case",
+  "UP from the first letter row returns to the command row")
+naming.modernPartyNamingCommand = nil
+naming.row, naming.col = 1, 1
+local modernNamingText = {}
+Font.draw = function(text, x, y)
+  modernNamingText[#modernNamingText + 1] = {
+    text = tostring(text), x = x, y = y,
+  }
+  return realFontDraw(text, x, y)
+end
+PaletteFX.clearTrueColor()
+PaletteFX.setPass("ui")
+for i = 1, 6 do PaletteFX.markTrueColor(8, i * 16 - 8, 16, 16) end
+T.eq(#PaletteFX.trueColorRects("ui"), 6,
+  "the naming compatibility fixture seeds inherited party-icon claims")
+local modernNamingOK, modernNamingErr = pcall(naming.draw, naming)
+Font.draw = realFontDraw
+T.check(modernNamingOK,
+  "the optional modern Rename presentation draws: "
+    .. tostring(modernNamingErr))
+local namingTrueColor = PaletteFX.trueColorRects("ui")
+local leakedNamingClaim = false
+for _, rect in ipairs(namingTrueColor) do
+  if rect.x == 8 and rect.w == 16 and rect.h == 16 then
+    leakedNamingClaim = true
+  end
+end
+T.check(not leakedNamingClaim,
+  "party-icon rectangles cannot leak onto the modern naming keyboard")
+PaletteFX.clearTrueColor()
+local modernCommands = {}
+for _, call in ipairs(modernNamingText) do
+  if call.text == "lower" or call.text == "DEL" or call.text == "END" then
+    modernCommands[call.text] = call
+  end
+end
+local hasModernCommands = modernCommands.lower
+  and modernCommands.DEL and modernCommands.END
+T.check(hasModernCommands,
+  "the modern Rename layout keeps case, DEL and END as visible commands")
+T.check(hasModernCommands
+    and modernCommands.lower.y == modernCommands.DEL.y
+    and modernCommands.DEL.y == modernCommands.END.y,
+  "the modern Rename commands share one bottom row")
+renameRun.loader.modOptions.modern_party_ui = nil
+naming.onDone("SPARK")
+T.eq(party[1].nickname, "SPARK",
+  "the styled naming screen preserves the source mod's completion callback")
+party[1].nickname = "LEAF"
+renameStack:pop()
+
+local relearnAction
+for _, item in ipairs(renameItems) do
+  if item.id == "RELEARN" then relearnAction = item break end
+end
+T.check(relearnAction and type(relearnAction.onSelect) == "function",
+  "QoL Toggles' RELEARN action remains reachable")
+local relearnOK, relearnErr = pcall(relearnAction.onSelect,
+  party[1], renameGame)
+T.check(relearnOK,
+  "QoL Toggles' RELEARN action opens: " .. tostring(relearnErr))
+local relearn = renameStack.states[#renameStack.states]
+T.eq(relearn and relearn.modernPartyRelearn, true,
+  "the relearn list receives the cohesive party presentation")
+T.eq(relearn:isWideBattleLayout(), true,
+  "the relearn list owns its inherited responsive surface")
+local relearnZones = relearn:sgbPalettes(renameGame)
+T.eq(relearnZones[1].w, 204,
+  "the relearn palette covers the full responsive width")
+T.eq(modernUi.shouldSuppress(relearn), false,
+  "Gen1 Modern UI leaves the styled relearn list source-owned")
+local relearnDrawOK, relearnDrawErr = pcall(relearn.draw, relearn)
+T.check(relearnDrawOK,
+  "the responsive relearn presentation draws: "
+    .. tostring(relearnDrawErr))
+relearn.items[1].onSelect()
+T.eq(party[1].relearnedMove, "GUST",
+  "the styled relearn list preserves the source mod's move callback")
+party[1].relearnedMove = nil
 
 local unrelatedNaming = { screenId = "NamingScreen", game = renameGame }
 T.eq(modernUi.shouldSuppress(unrelatedNaming), true,
@@ -1024,10 +1313,10 @@ T.check(firstFitted
     and math.max(firstFitted.quad.w * firstFitted.sx,
       firstFitted.quad.h * firstFitted.sy) >= 31.5,
   "the visible HGSS creature fills the native 32px party rail")
-T.check(#hgssMarks > #party,
-  "HGSS true-colour protection follows fitted opaque pixel rows")
-T.eq(#scaledFills, 0,
-  "fitted HGSS icons do not restore rectangular card backings")
+T.eq(#hgssMarks, #party,
+  "HGSS true-colour protection uses one stable well per fitted creature")
+T.eq(#scaledFills, #party,
+  "fitted HGSS icons are composited onto each card's final face colour")
 
 local hgssCalls = hgssRun.loader.exports.HGSS_SPRITES.calls
 T.eq(#hgssCalls, 0,
@@ -1187,11 +1476,13 @@ for i = 2, #wildsDraws do
   T.check(wildsDraws[i].quad.y == 0,
     "unselected Wilds card " .. i .. " stays on its authored idle frame")
 end
-T.check(#wildsMarks > #party,
-  "Wilds true-colour protection follows opaque sprite rows")
+T.eq(#wildsMarks, #party,
+  "Wilds true-colour protection uses one stable well per party card")
 for _, rect in ipairs(wildsMarks) do
-  T.check(rect.w < 16,
-    "Wilds transparent padding is never restored as a square")
+  T.eq(rect.w, 16,
+    "Wilds uses the complete face-coloured icon well")
+  T.eq(rect.h, 16,
+    "Wilds icon wells avoid Android row-by-row restoration seams")
 end
 
 wildsRun.release()
@@ -1284,6 +1575,47 @@ local firstMoveZone = moveZones[4]
 T.check(firstMove and math.abs(firstMove.x + Font.width(firstMove.text) / 2
     - (firstMoveZone.x + firstMoveZone.w / 2)) <= 1,
   "wide move names are centred within their cards")
+
+do
+T.eq(summary.modernMoveIndex, 1,
+  "the first learned move starts focused")
+input.pressed.right = true
+summary:update(0)
+input.pressed.right = nil
+T.eq(summary.modernMoveIndex, 2,
+  "RIGHT focuses the neighboring move card")
+input.pressed.a = true
+summary:update(0)
+input.pressed.a = nil
+T.eq(summary.modernMoveDetail, true,
+  "A opens the selected move's information card")
+local detailZones = summary:sgbPalettes(game) or {}
+T.eq(#detailZones, 4,
+  "move information replaces the four card palettes with one detail palette")
+T.check(exactBase(detailZones[4], { 254, 156, 85 }),
+  "the selected Fire move colours its information card")
+local detailText = {}
+Font.draw = function(text, x, y)
+  detailText[tostring(text)] = { x = x, y = y }
+  return realFontDraw(text, x, y)
+end
+local detailOK, detailErr = pcall(summary.draw, summary)
+Font.draw = realFontDraw
+T.check(detailOK,
+  "the selected move information draws headlessly: " .. tostring(detailErr))
+for _, label in ipairs({ "TYPE", "CLASS", "POWER", "ACCURACY", "PP" }) do
+  T.check(detailText[label] ~= nil,
+    "move information includes " .. label)
+end
+T.check(detailText["40"] ~= nil and detailText["100%"] ~= nil,
+  "move information exposes power and accuracy values")
+input.pressed.b = true
+summary:update(0)
+input.pressed.b = nil
+T.eq(summary.modernMoveDetail, false,
+  "B returns from move information to the four move cards")
+summary.modernMoveIndex = 1
+end
 
 game.renderer = { uiSize = function() return 160, 144 end }
 local compactMoveZones = summary:sgbPalettes(game) or {}
@@ -1703,18 +2035,20 @@ T.check(ribbonDrawOK,
     .. tostring(ribbonDrawErr))
 local sawRibbonHint
 for _, call in ipairs(ribbonText) do
-  if call.text == "A/B RIBBONS" then sawRibbonHint = true break end
+  if call.text == "ARROWS  A INFO  B RIBBONS" then
+    sawRibbonHint = true break
+  end
 end
 T.check(sawRibbonHint,
-  "the final summary footer clearly advertises Kanto Ribbons")
+  "the move page advertises both details and Kanto Ribbons")
 
 while stack:top() do stack:pop() end
 stack:push(ribbonSummary)
-input.pressed.a = true
+input.pressed.b = true
 ribbonSummary:update(0)
-input.pressed.a = nil
+input.pressed.b = nil
 T.check(stack:top() and stack:top().modernPartyRibbons == true,
-  "A on the final summary page opens Kanto Ribbons exactly once")
+  "B on the selectable move page opens Kanto Ribbons exactly once")
 T.eq(stack:top() and stack:top().mon, ribbonMon,
   "the Kanto Ribbons detail screen receives the selected Pokémon")
 local modernRibbonScreen = stack:top()
@@ -1934,8 +2268,8 @@ T.check(dvSummary.kantoRibbonsCompatible == true,
 T.check(dvSummary.crystalAnimatedSprite == true
     and dvSummary.spriteTrueColor == true,
   "the live Crystal animated summary sprite remains installed")
-T.eq(dvSummary.update, SummaryMenu.update,
-  "the composed Crystal/DV controller remains the live update method")
+T.check(type(dvSummary.update) == "function",
+  "the selectable moves adapter composes with the Crystal/DV controller")
 
 dvSummary.page = 3
 local dvText = {}
