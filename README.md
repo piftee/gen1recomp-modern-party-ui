@@ -41,7 +41,12 @@ Red, Blue, or Yellow ROM imported into
   four clear stat cards—or five when a compatible mod splits Special Attack
   and Special Defense
 - the MOVES summary page adds a labelled EXP meter and type-coloured move cards
-  with current/max PP
+  with current/max PP; choose a move to inspect its type, damage class, power,
+  accuracy and PP
+- callback-backed Rename and Relearn actions supplied by compatible QoL mods
+  keep their original behaviour while opening in cohesive responsive screens
+- the selected Rename style also covers Pokémon nickname prompts after catches,
+  starters and scripted gifts, while player and rival naming remain unchanged
 - when DV Tracker is installed, a third responsive DVS page shows HP and core
   stat DVs together with their Stat EXP
 - when Kanto Ribbons is installed, the final summary page leads into a fully
@@ -59,7 +64,7 @@ Kanto Ribbons handoff is added without replacing its ribbon screen.
 ## Settings
 
 The game's ordinary **OPTIONS** screen contains one **MODERN PARTY UI → OPEN**
-entry. Open it for a dedicated page containing all eight settings. They are
+entry. Open it for a dedicated page containing all ten settings. They are
 also available from **START → MODS → Modern Party UI → OPTIONS..**. Both
 locations edit the same saved values, and changes appear the next time the
 party screen draws.
@@ -67,13 +72,15 @@ party screen draws.
 | Setting | Choices |
 | --- | --- |
 | Card Color | Type, species, health, blue, or monochrome palettes |
+| Icon Source | Automatically compose installed providers, use original game art, prefer an installed menu pack, or prefer a follower pack |
+| Icon Animation | Animate only the highlighted party icon or hold every icon on its resting frame |
 | HP Display | Bar only, percentage, or current/max values |
 | EXP Display | Bar only, percentage, or progress/level-target values |
 | EXP Strip | Show or hide progress toward the next level |
 | Empty Slots | Show or hide unused party positions |
 | Backdrop | Diagonal grid or plain background |
 | Widescreen | Fill the available width or use classic 160×144 |
-| Icon Animation | Animate only the highlighted party icon or hold every icon on its resting frame |
+| Rename Style | Faithful Gen 1 keyboard or the responsive Modern Party UI button grid for party renames and newly caught, received or gifted Pokémon; CASE, DEL and END are reachable with the directional controls |
 
 ## Type palette
 

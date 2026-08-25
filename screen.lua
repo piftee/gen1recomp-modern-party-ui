@@ -70,6 +70,7 @@ return function(mod, genderExports, compatibility)
 
   local inkShader -- false when unavailable
   local fittedHgssIcons = {}
+  local originalIconImages = {}
   local iconAlphaMasks = {}
   local wildsIconDefs = {}
   local wildsIconAlphaMasks = {}
@@ -78,6 +79,7 @@ return function(mod, genderExports, compatibility)
   if Assets.register then
     Assets.register(function()
       fittedHgssIcons = {}
+      originalIconImages = {}
       iconAlphaMasks = {}
       wildsIconDefs = {}
       wildsIconAlphaMasks = {}
@@ -90,6 +92,37 @@ return function(mod, genderExports, compatibility)
       or PaletteFX.pal(menu.game.data, "BLUEMON")
     local effective = PaletteFX.effectiveColors(palette)
     return effective and effective[selected and 2 or 3] or nil
+  end
+
+  -- Android can expose hairline gaps when the final palette pass restores a
+  -- true-colour icon as a stack of one-pixel alpha runs.  Match the Pokédex
+  -- treatment instead: bake the sprite onto the card's *final* face colour
+  -- and restore one stable, integer-aligned icon well.  Because the backing
+  -- is exactly the colour the card receives after palette work, transparent
+  -- source pixels remain visually transparent without a white/grey square.
+  local function fillStableIconWell(menu, mon, selected, x, y, size, final)
+    local x1, y1 = math.floor(x), math.floor(y)
+    local x2, y2 = math.ceil(x + size), math.ceil(y + size)
+    local rect = {
+      x = x1, y = y1,
+      w = math.max(1, x2 - x1), h = math.max(1, y2 - y1),
+    }
+    love.graphics.push("all")
+    if final then
+      local face = cardFaceColor(menu, mon, selected)
+      if not face then
+        love.graphics.pop()
+        return nil
+      end
+      love.graphics.setColor((face[1] or 0) / 255,
+        (face[2] or 0) / 255, (face[3] or 0) / 255, 1)
+    else
+      local shade = selected and LIGHT or DARK
+      love.graphics.setColor(shade, shade, shade, 1)
+    end
+    love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h)
+    love.graphics.pop()
+    return rect
   end
 
   local function gray(value)
@@ -522,15 +555,22 @@ return function(mod, genderExports, compatibility)
     return width >= 110 and 31 or 23
   end
 
+  local METER_BOTTOM_PADDING = 1
+
   local function meterGeometry(x, y, width, height)
     local barX = x + contentInset(width)
     local barW = math.max(16, x + width - 5 - barX)
-    return y + height - 17, y + height - 9, barX, barW
+    -- Keep one native pixel between the lower text/meter row and the card's
+    -- chamfered frame.  The selected frame is deliberately heavier, so the
+    -- old edge-aligned row appeared to merge into it after integer scaling.
+    return y + height - 17 - METER_BOTTOM_PADDING,
+      y + height - 9 - METER_BOTTOM_PADDING, barX, barW
   end
 
   local function iconGeometry(x, y, width, height, iconSize)
     iconSize = math.max(1, math.floor(tonumber(iconSize) or 16))
     local hpY = meterGeometry(x, y, width, height)
+      + METER_BOTTOM_PADDING
     local left, top = x + 3, y + 3
     local availableW = contentInset(width) - 3
     local availableH = hpY - top
@@ -760,8 +800,9 @@ return function(mod, genderExports, compatibility)
     return runs
   end
 
-  local function drawWildsIcon(menu, mon, x, y, selected, counter, regions)
-    local def = wildsIconDef(menu, mon)
+  local function drawWildsIcon(menu, mon, x, y, selected, counter, regions,
+      resolvedDef)
+    local def = resolvedDef or wildsIconDef(menu, mon)
     if not def then return false end
     local okImage, image = pcall(Assets.image, def.image)
     if not okImage or not image then return false end
@@ -1073,6 +1114,158 @@ return function(mod, genderExports, compatibility)
     return true
   end
 
+  -- Draw the game's dex-indexed icon directly. This deliberately bypasses
+  -- per-species registries and Sprites.iconPath hooks, giving players a
+  -- dependable ORIGINAL choice even when several icon packs are installed.
+  -- It remains palette-driven, so the party card can colour it exactly like
+  -- the original engine renderer does.
+  local function drawOriginalIcon(menu, mon, x, y, animate, counter)
+    local icons = menu.game.data.icons or {}
+    local def = definition(menu, mon)
+    local name = def and def.dex and icons.byDex and icons.byDex[def.dex]
+    local path = name and icons.icons and icons.icons[name]
+    if type(path) ~= "string" then return false end
+
+    local image = originalIconImages[path]
+    if image == nil then
+      local ok, loaded = pcall(Assets.image, path)
+      image = ok and loaded or false
+      originalIconImages[path] = image
+    end
+    if not image then return false end
+
+    local iw, ih
+    if type(image.getDimensions) == "function" then
+      iw, ih = image:getDimensions()
+    elseif type(image.getWidth) == "function"
+        and type(image.getHeight) == "function" then
+      iw, ih = image:getWidth(), image:getHeight()
+    end
+    iw, ih = tonumber(iw), tonumber(ih)
+    if not iw or not ih or iw <= 0 or ih <= 0 then return false end
+
+    local alt = false
+    if animate then
+      local maxHP = mon.stats and tonumber(mon.stats.hp) or 1
+      local hpPixels = math.floor((tonumber(mon.hp) or 0) * 48
+        / math.max(1, maxHP))
+      local speed = hpPixels >= 27 and 5 or hpPixels >= 10 and 16 or 32
+      alt = math.floor((tonumber(counter) or 0) / speed) % 2 == 1
+    end
+    if alt and (name == "BALL" or name == "HELIX") then
+      y, alt = y + 1, false
+    end
+    local frame = ih > 16 and PartyMenu.frameFor(name, alt, ih) or 0
+
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    if PartyMenu.mirrorsIcon(name) and love.graphics.newQuad then
+      local half = love.graphics.newQuad(0, frame * 16,
+        math.min(8, iw), math.min(16, ih - frame * 16), iw, ih)
+      love.graphics.draw(image, half, x, y)
+      love.graphics.draw(image, half, x + 16, y, 0, -1, 1)
+    elseif ih > 16 and love.graphics.newQuad then
+      local quad = love.graphics.newQuad(0, frame * 16,
+        math.min(16, iw), math.min(16, ih - frame * 16), iw, ih)
+      love.graphics.draw(image, quad, x, y)
+    else
+      love.graphics.draw(image, x, y)
+    end
+    love.graphics.pop()
+    return true
+  end
+
+  -- Compact, source-aware icon presenter for party-owned child screens.
+  -- It follows ICON SOURCE / ICON ANIMATION, consumes Wilds and HGSS through
+  -- the same resolvers as the roster, and composites authored artwork onto
+  -- the caller's final face colour so transparent pixels cannot become a
+  -- white or grey square during the palette pass.
+  local function drawToolIcon(game, mon, x, y, opts)
+    opts = opts or {}
+    if not (game and mon) then return false end
+    local menu = { game = game }
+    local size = math.max(8, math.floor(tonumber(opts.size) or 16))
+    local selected = opts.selected ~= false
+    local counter = tonumber(opts.counter) or 0
+    local source = setting("sprite_source", "auto")
+    local animate = setting("animate_icons", true) and selected
+    local def = definition(menu, mon)
+    local icons = game.data.icons or {}
+    local entry = (icons.bySpecies and icons.bySpecies[mon.species])
+      or (def and def.icon)
+    local path = type(entry) == "table"
+      and tostring(entry.image or ""):lower() or ""
+    local paletteAware = path:find("icons_original", 1, true) ~= nil
+      or path:find("icon_original", 1, true) ~= nil
+    local authored = type(entry) == "table" and not paletteAware
+    local hgss = compatibility.hgssSprites and authored
+      and entry.trueColor == true
+      and path:find("assets/icons/", 1, true) ~= nil
+      and path:find("hgss", 1, true) ~= nil
+    local allowFollower = source == "auto" or source == "follower_pack"
+    local wildsDef = allowFollower and compatibility.wildsOfKanto
+      and wildsIconDef(menu, mon) or nil
+    local protected = authored or hgss
+      or (wildsDef and wildsDef.trueColor ~= false)
+    local background = opts.background
+    local stableRect
+
+    if protected and type(background) == "table" then
+      stableRect = {
+        x = math.floor(x), y = math.floor(y), w = size, h = size,
+      }
+      love.graphics.push("all")
+      love.graphics.setColor((background[1] or 255) / 255,
+        (background[2] or 255) / 255,
+        (background[3] or 255) / 255, 1)
+      love.graphics.rectangle("fill", stableRect.x, stableRect.y,
+        stableRect.w, stableRect.h)
+      love.graphics.pop()
+    end
+
+    local regions = {}
+    local drawn = false
+    if source == "original" then
+      drawn = drawOriginalIcon(menu, mon, x, y, animate, counter) == true
+      protected = false
+      stableRect = nil
+    elseif wildsDef then
+      drawn = drawWildsIcon(menu, mon, x, y, animate, counter,
+        regions, wildsDef) == true
+    elseif allowFollower and hgss then
+      drawn = drawFittedHgssIcon(menu, mon, entry, x, y,
+        animate, counter, size, regions) == true
+    end
+
+    if not drawn then
+      local scale = size / 16
+      local runs = source ~= "original" and not hgss
+        and iconOpaqueRuns(menu, mon, entry, animate, counter) or nil
+      drawn = drawIconCollectingTrueColor(menu, mon, x, y,
+        animate, counter, regions, scale, runs,
+        type(entry) == "table" and runs == nil) == true
+    end
+    if not drawn then
+      drawn = drawFallbackIcon(menu, mon, x, y,
+        animate, counter, regions) == true
+    end
+
+    if drawn and protected and stableRect then
+      PaletteFX.markTrueColor(stableRect.x, stableRect.y,
+        stableRect.w, stableRect.h)
+    elseif drawn and protected then
+      -- Only authored/full-colour artwork may publish literal-colour claims.
+      -- Palette-aware ORIGINAL packs sometimes report source-sheet
+      -- coordinates here; replaying those coordinates onto a responsive
+      -- child screen creates the scattered grey rectangles seen on naming.
+      for _, rect in ipairs(regions) do
+        PaletteFX.markTrueColor(rect.x, rect.y, rect.w, rect.h)
+      end
+    end
+    gray(WHITE)
+    return drawn
+  end
+
   local function drawPartyCard(menu, layout, mon, index, trueColorIcons)
     local x, y, width, height = slotGeometry(layout, index)
     local selected = index == menu.index
@@ -1094,6 +1287,7 @@ return function(mod, genderExports, compatibility)
     local icons = menu.game.data.icons or {}
     local entry = (icons.bySpecies and icons.bySpecies[mon.species])
       or (def and def.icon)
+    local source = setting("sprite_source", "auto")
     local trueColorIcon = false
     local hgssIcon = false
     if type(entry) == "table" then
@@ -1114,8 +1308,10 @@ return function(mod, genderExports, compatibility)
     -- Fit HGSS's visible creature into this rail. Its 32px source frame has
     -- substantial transparent padding, so scaling the complete frame leaves
     -- the actual sprite much smaller than the available card space.
-    local iconSize = hgssIcon and (spacious and 32 or 22) or 16
-    local iconScale = hgssIcon and iconSize / 32 or 1
+    local fitFollowerIcon = hgssIcon
+      and (source == "auto" or source == "follower_pack")
+    local iconSize = fitFollowerIcon and (spacious and 32 or 22) or 16
+    local iconScale = fitFollowerIcon and iconSize / 32 or 1
     local iconX, iconY = iconGeometry(x, y, width, height, iconSize)
     local textX = math.max(x + contentInset(width), iconX + iconSize + 2)
 
@@ -1125,26 +1321,82 @@ return function(mod, genderExports, compatibility)
     -- of the visible cards is allowed to advance beyond its resting frame.
     local regionCount = #trueColorIcons
     local animate = setting("animate_icons", true) and selected
-    local opaqueRuns = not hgssIcon
+    local opaqueRuns = source ~= "original" and not hgssIcon
       and iconOpaqueRuns(menu, mon, entry, animate, menu.blink or 0) or nil
-    local wildsDrawn = compatibility.wildsOfKanto
-      and drawWildsIcon(menu, mon, iconX, iconY,
-        animate, menu.blink or 0, trueColorIcons)
-    local fitted = not wildsDrawn and hgssIcon
-      and drawFittedHgssIcon(menu, mon, entry,
-        iconX, iconY, animate, menu.blink or 0, iconSize, trueColorIcons)
-    local drawn = wildsDrawn or fitted
+    local allowFollower = source == "auto" or source == "follower_pack"
+    local wildsDef = allowFollower and compatibility.wildsOfKanto
+      and wildsIconDef(menu, mon) or nil
+    local stableRect
+    local protectedDrawn = false
+
+    local function prepareStableWell()
+      if not stableRect then
+        stableRect = fillStableIconWell(menu, mon, selected,
+          iconX, iconY, iconSize, true)
+      end
+      return stableRect ~= nil
+    end
+
+    local function discardStableWell()
+      while #trueColorIcons > regionCount do
+        table.remove(trueColorIcons)
+      end
+      if stableRect then
+        fillStableIconWell(menu, mon, selected,
+          iconX, iconY, iconSize, false)
+        stableRect = nil
+      end
+    end
+
+    local drawn = false
+    if source == "original" then
+      drawn = drawOriginalIcon(menu, mon, iconX, iconY,
+        animate, menu.blink or 0) == true
+    end
+
+    if not drawn and wildsDef then
+      local protectWilds = wildsDef.trueColor ~= false
+      if protectWilds then prepareStableWell() end
+      drawn = drawWildsIcon(menu, mon, iconX, iconY,
+        animate, menu.blink or 0, trueColorIcons, wildsDef) == true
+      protectedDrawn = drawn and protectWilds
+      if not drawn then discardStableWell() end
+    end
+
+    local fitted = false
+    if not drawn and allowFollower and hgssIcon then
+      prepareStableWell()
+      fitted = drawFittedHgssIcon(menu, mon, entry,
+        iconX, iconY, animate, menu.blink or 0,
+        iconSize, trueColorIcons) == true
+      drawn = fitted
+      protectedDrawn = fitted
+      if not fitted then discardStableWell() end
+    end
+
+    -- FOLLOWER PACKS commonly replace icons.bySpecies outright.  MENU PACK
+    -- means "use the ordinary menu/dex chain", so temporarily step around a
+    -- detected HGSS follower record instead of silently drawing the follower
+    -- selected by load order.  The registry is restored inside the helper.
+    local menuPackDrawn = false
+    if not drawn and source == "menu_pack" and hgssIcon then
+      menuPackDrawn = drawFallbackIcon(menu, mon, iconX, iconY,
+        animate, menu.blink or 0, trueColorIcons) == true
+      drawn = menuPackDrawn
+    end
+
     if not drawn then
-      drawn = drawIconCollectingTrueColor(menu, mon, iconX, iconY,
+      if trueColorIcon then prepareStableWell() end
+      local sharedDrawn = drawIconCollectingTrueColor(menu, mon, iconX, iconY,
         animate, menu.blink or 0, trueColorIcons, iconScale, opaqueRuns,
         type(entry) == "table" and opaqueRuns == nil)
-      if drawn ~= true then
+      drawn = sharedDrawn == true
+      protectedDrawn = drawn and trueColorIcon
+      if not drawn then
         -- A renderer may have claimed colour before discovering that its
         -- image could not be loaded. Remove those claims before falling back
         -- or the empty source canvas would still be restored as a square.
-        while #trueColorIcons > regionCount do
-          table.remove(trueColorIcons)
-        end
+        discardStableWell()
         drawn = drawFallbackIcon(menu, mon, iconX, iconY,
           animate, menu.blink or 0, trueColorIcons)
       elseif trueColorIcon and opaqueRuns
@@ -1152,6 +1404,16 @@ return function(mod, genderExports, compatibility)
         appendOpaqueRegions(trueColorIcons, iconX, iconY,
           iconScale, opaqueRuns)
       end
+    end
+
+    if protectedDrawn and stableRect then
+      -- Replace the renderer's per-row claims with one Android-safe
+      -- composite.  markTrueColorOutside still clips this rectangle around
+      -- the party action popup, so modal menus retain their own pixels.
+      while #trueColorIcons > regionCount do
+        table.remove(trueColorIcons)
+      end
+      trueColorIcons[#trueColorIcons + 1] = stableRect
     end
 
     drawText(stripGenderSuffix(
@@ -1483,5 +1745,6 @@ return function(mod, genderExports, compatibility)
       menu.modernPartyLayoutInfo = function() return layoutFor(menu) end
       return menu
     end,
+    drawToolIcon = drawToolIcon,
   }
 end
