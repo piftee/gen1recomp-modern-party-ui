@@ -625,6 +625,12 @@ return function(mod)
     installSurface(state, parent)
     state.modernPartyRelearn = true
     state.draw = function(self)
+      -- Relearn can be pushed while the party roster is still contributing
+      -- true-colour menu-icon regions to the current UI pass.  It owns an
+      -- opaque screen, so discard those inherited claims before drawing its
+      -- cards just as the summary and naming screens do.  World/voxel claims
+      -- live in a separate pass and are deliberately left untouched.
+      clearInheritedUiTrueColor()
       local width, height = self:uiSize()
       local rows = self.items or self.moves or self.rows or {}
       backdrop(width, height, "RELEARN", "A CHOOSE    B BACK")

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 2026-08-26
+
+- Relearn now clears inherited UI-only true-colour sprite regions before its
+  opaque move list is drawn, preventing custom party icons from reappearing as
+  grey boxes over move cards while leaving world and voxel rendering intact.
+
 ## 0.4.0 - 2026-08-25
 
 - Move cards on the Pokémon summary are now selectable. Press A on a learned

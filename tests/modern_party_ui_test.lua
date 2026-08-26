@@ -1208,10 +1208,25 @@ T.eq(relearnZones[1].w, 204,
   "the relearn palette covers the full responsive width")
 T.eq(modernUi.shouldSuppress(relearn), false,
   "Gen1 Modern UI leaves the styled relearn list source-owned")
+PaletteFX.clearTrueColor()
+PaletteFX.setPass("ui")
+for i = 1, 6 do PaletteFX.markTrueColor(8, i * 16 - 8, 16, 16) end
+T.eq(#PaletteFX.trueColorRects("ui"), 6,
+  "the relearn compatibility fixture seeds inherited party-icon claims")
 local relearnDrawOK, relearnDrawErr = pcall(relearn.draw, relearn)
 T.check(relearnDrawOK,
   "the responsive relearn presentation draws: "
     .. tostring(relearnDrawErr))
+local relearnTrueColor = PaletteFX.trueColorRects("ui")
+local leakedRelearnClaim = false
+for _, rect in ipairs(relearnTrueColor) do
+  if rect.x == 8 and rect.w == 16 and rect.h == 16 then
+    leakedRelearnClaim = true
+  end
+end
+T.check(not leakedRelearnClaim,
+  "party-icon rectangles cannot leak onto the relearn move cards")
+PaletteFX.clearTrueColor()
 relearn.items[1].onSelect()
 T.eq(party[1].relearnedMove, "GUST",
   "the styled relearn list preserves the source mod's move callback")
