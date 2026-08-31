@@ -6,6 +6,10 @@ and animated menu icons. Compatible information mods can add another modern
 summary page. Party and summary cards use a cohesive primary-type palette
 shared with Typed Move Colors.
 
+Gold, Silver, and Crystal use generation-specific party, summary, and naming
+presenters over the native Gen 2 controllers, icons, HP bars, held items, and
+field-move behavior.
+
 **Persona: the nostalgic modernizer.** It is for players who want the clearer
 information hierarchy of newer Pokémon games without importing art from a
 different generation or making the screen feel detached from Pokémon Red.
@@ -19,7 +23,7 @@ different generation or making the screen feel detached from Pokémon Red.
 3. Enable **Modern Party UI**, then open your game.
 
 The ZIP contains only the mod. You still need your own legally obtained Pokémon
-Red, Blue, or Yellow ROM imported into
+Red, Blue, Yellow, Gold, Silver, or Crystal ROM imported into
 [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp).
 
 ## What changes
@@ -120,7 +124,7 @@ colour, so true-colour protection does not introduce a gray icon square. The
 same protection is clipped beneath the action menu, keeping popup text and
 backgrounds intact when they overlap a colour icon. Third-party colour claims
 made inside the shared icon renderer follow the same popup-aware path. This
-keeps the taller FOLLOW and utility menus supplied by **Wilds of Kanto 2.1.7**
+keeps the taller FOLLOW and utility menus supplied by **Wilds of Kanto 2.2.0**
 free of unshaded grey blocks.
 
 **Wilds of Kanto** is integrated through its exported follower-sprite resolver
@@ -129,6 +133,14 @@ idle/walk frames even when another late-loading mod replaces
 `PartyMenu.drawIcon`; if Wilds cannot resolve or load a sheet, the normal icon
 chain remains the fallback. Only opaque Wilds pixels receive true-colour
 protection, so its transparent 16x16 canvas cannot become a square.
+
+The **Icon Source** setting keeps those roles separate. **Menu Pack** resolves
+the installed provider that explicitly owns party icons, so Unique Menu Icons
+cannot be displaced by a later Wilds/follower table update. **Follower Pack**
+continues to request Wilds' configured follower sheets. HGSS Visual Overhaul's
+`assets/icons` sheets are party/menu art: their visible pixels are cropped,
+centred and enlarged to fill the 32-pixel rail under **Menu Pack**, without
+stretching their transparent source padding.
 
 The **Species** card-colour option continues to use the engine's live Pokémon
 palette lookup. The default **Type** option changes only the card surface; icon
@@ -161,6 +173,14 @@ renderers visible—including submenus, DV data and the responsive ribbon
 collection—while it continues presenting every other supported menu. Naming
 opened from a party action also remains native so QoL Toggles' **RENAME** flow
 stays interactive. Its **HIDE ORIGINAL UI** setting can remain enabled.
+
+FAFFO's Moves Manager 1.0.1 is supported through its published semantic screen
+contract. The party's **MOVES** action opens a responsive 2x2 current-move
+grid, remembered-move list and complete three-page move detail view in Modern
+Party UI's card style. Moves Manager continues to own navigation, move memory,
+PP calculations, HM restrictions, swapping and teaching, so its save behavior
+and callbacks are not duplicated or replaced. This composes with Gen1 Modern
+UI whether its original-UI suppression option is enabled or disabled.
 
 Modern Party UI loads after the known menu and sprite presentation mods and
 safely replaces an existing `PartyMenu` or `SummaryMenu` record instead of
@@ -230,7 +250,7 @@ behavior surface deliberately small.
 
 Gender Mod 0.3.5, DV Tracker 1.0.0, Kanto Ribbons 0.18.0, Gen1 Modern UI
 0.9.2, Crystal 251 0.10.3, QoL Toggles 1.27.0, DramaticShape, Crystal Animated
-Sprites with Shiny Visuals, Unique Menu Icons, HGSS Visual Overhaul 1.0.0,
+Sprites with Shiny Visuals, Unique Menu Icons, HGSS Visual Overhaul 1.0.2,
 Anytime Rename 1.2.1, Wilds of
 Kanto and Pokémon Gold & Silver Sprites are listed as optional dependencies so
 their controller, adapter, stat, art, submenu and icon contributions initialize

@@ -1,9 +1,10 @@
 {
   "id": "modern_party_ui",
   "name": "Modern Party UI",
-  "version": "0.4.1",
+  "version": "0.4.5",
   "github": "piftee/gen1recomp-modern-party-ui",
   "api": 2,
+  "games": ["gen1", "gen2"],
   "entry": "main.lua",
   "profile": "content",
   "game_version": ">=0.0.0-dev <1.0.0",
@@ -24,11 +25,12 @@
     "overworld_wild_spawns",
     "Gold_Silver_Sprites",
     "qol_toggles",
-    "anytime_rename"
+    "anytime_rename",
+    "moves_manager"
   ],
   "conflicts": [],
   "incompatible": [],
   "permissions": ["engine_internals"],
   "experimental": false,
-  "description": "Responsive type-coloured party and Pokémon summary cards built from Gen 1 assets."
+  "description": "Responsive type-coloured party and Pokémon summary presentation for Gen 1 and Gen 2."
 }

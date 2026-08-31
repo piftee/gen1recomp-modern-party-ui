@@ -1,0 +1,13 @@
+{
+  "id": "moves_manager",
+  "name": "Moves Manager",
+  "version": "1.0.1",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "game_version": ">=0.0.0-0 <2.0.0",
+  "priority": 510,
+  "permissions": [],
+  "dependencies": [],
+  "optional_dependencies": ["gen1_modern_ui"]
+}

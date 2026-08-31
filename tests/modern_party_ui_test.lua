@@ -404,6 +404,33 @@ T.eq(cardLayers[2].points[2], 16,
 T.eq(#fractionalScales, 0,
   "the native tile font is never fractionally scaled")
 
+-- Gen 1's canonical Psychic identifier includes the _TYPE suffix. The colour
+-- table already accepted it, but the compact party header previously fell
+-- through to its unknown-type marker.
+do
+  local savedTypes = run.data.pokemon.FIXMON_A.types
+  local savedDrawIcon = PartyMenu.drawIcon
+  local psychicHeaderText = {}
+  run.data.pokemon.FIXMON_A.types = { "PSYCHIC_TYPE" }
+  PartyMenu.drawIcon = function() return true end
+  Font.draw = function(text, x, y)
+    psychicHeaderText[#psychicHeaderText + 1] = tostring(text)
+    return realFontDraw(text, x, y)
+  end
+  local psychicOK, psychicErr = pcall(screen.draw, screen)
+  Font.draw = realFontDraw
+  PartyMenu.drawIcon = savedDrawIcon
+  run.data.pokemon.FIXMON_A.types = savedTypes
+  T.check(psychicOK,
+    "a Psychic-led party draws cleanly: " .. tostring(psychicErr))
+  local sawPsychicLabel = false
+  for _, text in ipairs(psychicHeaderText) do
+    if text == "PSY" then sawPsychicLabel = true break end
+  end
+  T.check(sawPsychicLabel,
+    "the Gen 1 PSYCHIC_TYPE identifier renders PSY instead of ---")
+end
+
 -- Unique Menu Icons 1.5.0 renamed its three asset folders from icons_* to
 -- icon_*.  ORIGINAL remains palette-aware; protecting its grayscale source
 -- as literal true colour would bypass the card palette and make it look gray.
@@ -590,7 +617,7 @@ for _, rect in ipairs(modalMarks) do
     "true-colour icon protection never overlaps the action menu or shadow")
 end
 
--- Wilds of Kanto 2.1.7 wraps PartyMenu.drawIcon and calls markTrueColor from
+-- Wilds of Kanto 2.2.0 wraps PartyMenu.drawIcon and calls markTrueColor from
 -- inside the shared icon renderer. A taller FOLLOW/field-move popup overlaps
 -- several icon cells, so those third-party claims must pass through the same
 -- dynamic popup cut-out instead of re-blitting the popup as raw grey pixels.
@@ -1238,7 +1265,213 @@ T.eq(modernUi.shouldSuppress(unrelatedNaming), true,
 renameRun.release()
 end
 
--- HGSS Visual Overhaul 1.0.0 publishes padded 32x32 true-colour party frames.
+-- FAFFO's Moves Manager owns move reordering, its three detail pages,
+-- remembered moves and teaching/replacement. Modern Party UI must replace
+-- only that source screen's fixed presentation and leave every controller
+-- transition and mutation on the source object.
+do
+local movesData = T.fixtures.fresh()
+movesData.icons = data.icons
+movesData.palettes = data.palettes
+movesData.moves.FIX_BITE = {
+  id = "FIX_BITE", name = "BITE", type = "DARK", category = "PHYSICAL",
+  power = 60, accuracy = 100, pp = 25, effect = "FLINCH",
+}
+movesData.moves.FIX_GUST = {
+  id = "FIX_GUST", name = "GUST", type = "FLYING", category = "SPECIAL",
+  power = 40, accuracy = 100, pp = 35, effect = "NONE",
+}
+Font.load(movesData)
+local movesRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/gen1_modern_ui",
+  "mods/modern_party_ui/tests/fixtures/moves_manager",
+  "mods/modern_party_ui",
+}, { data = movesData, dev = true })
+T.eq(#movesRun.errors, 0,
+  "loads beside FAFFO's Moves Manager 1.0.1 and Gen1 Modern UI")
+
+local movesStack = { states = {} }
+function movesStack:push(state) self.states[#self.states + 1] = state end
+function movesStack:pop() return table.remove(self.states) end
+function movesStack:top() return self.states[#self.states] end
+local movesInput = { pressed = {} }
+function movesInput:wasPressed(key) return self.pressed[key] == true end
+local managedMon = mon("FIXMON_A", "LEAF", 18, 48, 48)
+managedMon.moves = {
+  { id = "FIX_TACKLE", pp = 31 },
+  { id = "FIX_EMBERISH", pp = 17 },
+}
+local movesGame = {
+  data = movesRun.data,
+  save = { party = { managedMon }, inventory = {}, options = {} },
+  stack = movesStack,
+  input = movesInput,
+}
+local movesRoster = movesRun.data.screens.PartyMenu.new(movesGame, {})
+movesRoster.uiSize = function() return 204, 144 end
+movesStack:push(movesRoster)
+local moveItems = Runtime.call("ui.party.submenu",
+  function(_, items) return items end,
+  movesGame, { { id = "STATS", label = "STATS" } }, managedMon, {})
+local movesAction
+for _, item in ipairs(moveItems) do
+  if item.id == "MOVES" then movesAction = item break end
+end
+T.check(movesAction and type(movesAction.onSelect) == "function",
+  "Moves Manager's MOVES party action remains available")
+local openMovesOK, openMovesErr = pcall(movesAction.onSelect,
+  managedMon, movesGame)
+T.check(openMovesOK,
+  "the source MOVES action opens: " .. tostring(openMovesErr))
+local manager = movesStack:top()
+T.eq(manager and manager.screenId, "MovesManager",
+  "Moves Manager still creates its own source controller")
+T.eq(manager and manager.modernPartyMovesManager, true,
+  "the source controller receives the responsive party presentation")
+T.eq(getmetatable(manager) and getmetatable(manager).screenId,
+  "MovesManager", "the modern presentation preserves the source metatable")
+T.eq(select(1, manager:uiSize()), 204,
+  "Moves Manager inherits the responsive party width")
+T.eq(select(2, manager:uiSize()), 144,
+  "Moves Manager inherits the responsive party height")
+T.eq(manager:isWideBattleLayout(), true,
+  "Moves Manager identifies itself as the responsive surface owner")
+
+local modernMoves = movesRun.loader.exports.gen1_modern_ui
+T.eq(modernMoves.shouldSuppress(manager), false,
+  "Gen1 Modern UI leaves the decorated Moves Manager source-owned")
+T.eq(modernMoves.shouldSuppress({
+    screenId = "MovesManager", mon = managedMon, mode = "known",
+  }), true,
+  "an undecorated Moves Manager screen retains its published Modern UI adapter")
+
+local realMovesFontDraw = Font.draw
+local movesText = {}
+Font.draw = function(text, x, y)
+  movesText[#movesText + 1] = tostring(text)
+  return realMovesFontDraw(text, x, y)
+end
+PaletteFX.clearTrueColor()
+PaletteFX.setPass("ui")
+for i = 1, 6 do PaletteFX.markTrueColor(8, i * 16 - 8, 16, 16) end
+local movesDrawOK, movesDrawErr = pcall(manager.draw, manager)
+Font.draw = realMovesFontDraw
+T.check(movesDrawOK,
+  "the responsive Moves Manager cards draw: " .. tostring(movesDrawErr))
+local visibleMovesText = table.concat(movesText, "|")
+T.check(visibleMovesText:find("MOVES %- LEAF") ~= nil,
+  "the modern Moves Manager keeps the selected Pokémon in its title")
+T.check(visibleMovesText:find("FIX TACKLE", 1, true) ~= nil,
+  "the modern Moves Manager renders the source move list")
+T.check(visibleMovesText:find("PP 31/35", 1, true) ~= nil,
+  "the modern Moves Manager renders current and maximum PP")
+local leakedMovesClaim = false
+for _, rect in ipairs(PaletteFX.trueColorRects("ui")) do
+  if rect.x == 8 and rect.w == 16 and rect.h == 16 then
+    leakedMovesClaim = true
+  end
+end
+T.check(not leakedMovesClaim,
+  "party-icon rectangles cannot leak onto the Moves Manager cards")
+PaletteFX.clearTrueColor()
+
+local function pressMoves(key)
+  movesInput.pressed[key] = true
+  manager:update(0)
+  movesInput.pressed[key] = nil
+end
+pressMoves("select")
+T.eq(manager.swapSlot, 1,
+  "SELECT starts reordering through Moves Manager's source controller")
+local markedModel = movesRun.loader.exports.modern_party_ui.partyTools
+  .movesManagerModel(manager)
+T.eq(markedModel.rows[1].marker, true,
+  "the modern cards consume Moves Manager's source reorder marker")
+local realMovesPolygon = love.graphics.polygon
+local markerWedges = 0
+love.graphics.polygon = function(mode, points, ...)
+  if mode == "fill" and type(points) == "table" and #points == 6 then
+    markerWedges = markerWedges + 1
+  end
+  if realMovesPolygon then
+    return realMovesPolygon(mode, points, ...)
+  end
+end
+local markedDrawOK, markedDrawErr = pcall(manager.draw, manager)
+love.graphics.polygon = realMovesPolygon
+T.check(markedDrawOK,
+  "the reordered Moves Manager cards draw: " .. tostring(markedDrawErr))
+T.check(markerWedges >= 1,
+  "the modern cards draw the source reorder marker as a compact icon")
+pressMoves("down")
+pressMoves("select")
+T.eq(managedMon.moves[1].id, "FIX_EMBERISH",
+  "move reordering remains owned by FAFFO's controller")
+T.eq(managedMon.moves[2].id, "FIX_TACKLE",
+  "the second move receives the swapped source entry")
+pressMoves("a")
+T.eq(manager.mode, "current_detail",
+  "A opens FAFFO's current-move details")
+pressMoves("right")
+T.eq(manager.detailPage, 2,
+  "detail-page navigation remains functional")
+pressMoves("a")
+T.eq(manager.mode, "pool",
+  "CHANGE MOVE opens FAFFO's remembered-move pool")
+pressMoves("a")
+T.eq(manager.mode, "candidate_detail",
+  "a remembered move opens FAFFO's candidate details")
+pressMoves("a")
+T.eq(manager.mode, "known",
+  "teaching a candidate returns to FAFFO's known-moves page")
+T.eq(managedMon.moves[2].id, "FIX_BITE",
+  "FAFFO's replacement logic writes the selected remembered move")
+T.eq(managedMon.movesManagerTeachCalls, 1,
+  "the source teaching callback runs exactly once")
+T.check(manager.sourceUpdateCalls >= 8,
+  "all interactions continue through Moves Manager's source update method")
+movesRun.release()
+end
+
+-- Moves Manager is also useful without Gen1 Modern UI installed.  Its source
+-- controller must receive the same Modern Party surface directly in that
+-- smaller stack.
+do
+local soloMovesData = T.fixtures.fresh()
+soloMovesData.icons = data.icons
+soloMovesData.palettes = data.palettes
+Font.load(soloMovesData)
+local soloMovesRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/moves_manager",
+  "mods/modern_party_ui",
+}, { data = soloMovesData, dev = true })
+T.eq(#soloMovesRun.errors, 0,
+  "loads beside FAFFO's Moves Manager without Gen1 Modern UI")
+local soloStack = { states = {} }
+function soloStack:push(state) self.states[#self.states + 1] = state end
+function soloStack:pop() return table.remove(self.states) end
+function soloStack:top() return self.states[#self.states] end
+local soloInput = { pressed = {} }
+function soloInput:wasPressed(key) return self.pressed[key] == true end
+local soloMon = mon("FIXMON_A", "SOLO", 18, 48, 48)
+soloMon.moves = { { id = "FIX_TACKLE", pp = 31 } }
+local soloGame = {
+  data = soloMovesRun.data,
+  save = { party = { soloMon }, inventory = {}, options = {} },
+  stack = soloStack,
+  input = soloInput,
+}
+local soloRecord = soloMovesRun.data.screens.MovesManager
+local soloManager = soloRecord.new(soloGame, soloMon)
+T.eq(soloManager.modernPartyMovesManager, true,
+  "Moves Manager receives the modern surface without Gen1 Modern UI")
+local soloDrawOK, soloDrawErr = pcall(soloManager.draw, soloManager)
+T.check(soloDrawOK,
+  "the standalone Moves Manager surface draws: " .. tostring(soloDrawErr))
+soloMovesRun.release()
+end
+
+-- HGSS Visual Overhaul 1.0.2 publishes padded 32x32 true-colour party frames.
 -- Fit the visible alpha bounds into the complete card rail and protect only
 -- those visible pixels, rather than scaling the transparent source canvas.
 do
@@ -1259,7 +1492,7 @@ local hgssRun = T.sdk.loadMods({
   "mods/modern_party_ui/tests/fixtures/hgss_sprites",
   "mods/modern_party_ui",
 }, { data = hgssData, dev = true })
-T.eq(#hgssRun.errors, 0, "loads beside HGSS Visual Overhaul 1.0.0")
+T.eq(#hgssRun.errors, 0, "loads beside HGSS Visual Overhaul 1.0.2")
 local hgssGame = {
   data = hgssRun.data,
   save = { party = party, inventory = {}, options = {} },
@@ -1337,6 +1570,27 @@ local hgssCalls = hgssRun.loader.exports.HGSS_SPRITES.calls
 T.eq(#hgssCalls, 0,
   "the fitted path bypasses HGSS's padded full-frame renderer")
 
+-- HGSS's assets/icons records are party/menu art, even though the same mod
+-- also replaces overworld characters. MENU PACK must therefore retain the
+-- visible-alpha fit instead of dropping to a tiny 16px vanilla fallback.
+hgssRun.loader.modOptions.modern_party_ui = { sprite_source = "menu_pack" }
+local beforeHgssMenuPack = #fittedDraws
+local hgssMenuPackOK, hgssMenuPackErr = pcall(hgssScreen.draw, hgssScreen)
+T.check(hgssMenuPackOK,
+  "HGSS MENU PACK draws headlessly: " .. tostring(hgssMenuPackErr))
+T.eq(#fittedDraws - beforeHgssMenuPack, #party,
+  "MENU PACK alpha-fits every HGSS party icon instead of shrinking it")
+for i = beforeHgssMenuPack + 1, #fittedDraws do
+  local draw = fittedDraws[i]
+  T.check(draw and math.max(draw.quad.w * draw.sx,
+      draw.quad.h * draw.sy) >= 31.5,
+    "HGSS MENU PACK card " .. (i - beforeHgssMenuPack)
+      .. " fills the native party rail")
+end
+T.eq(#hgssCalls, 0,
+  "HGSS MENU PACK bypasses the padded 32px shared renderer")
+hgssRun.loader.modOptions.modern_party_ui = nil
+
 -- Frame 48 reaches frame two at every healthy/yellow/red HGSS cadence, but
 -- only the focused card may use it.
 hgssScreen.blink = 48
@@ -1406,7 +1660,7 @@ local wildsRun = T.sdk.loadMods({
   "mods/modern_party_ui/tests/fixtures/wilds_of_kanto",
   "mods/modern_party_ui",
 }, { data = wildsData, dev = true })
-T.eq(#wildsRun.errors, 0, "loads beside Wilds of Kanto 2.1.7")
+T.eq(#wildsRun.errors, 0, "loads beside Wilds of Kanto 2.2.0")
 
 local wildsGame = {
   data = wildsRun.data,
@@ -1501,6 +1755,139 @@ for _, rect in ipairs(wildsMarks) do
 end
 
 wildsRun.release()
+end
+
+-- Unique Menu Icons advertises that it owns party/menu art. A follower mod
+-- may replace the live icons.bySpecies table later, but MENU PACK must recover
+-- Unique's frozen registry contribution while FOLLOWER PACK still selects the
+-- Wilds resolver. This reproduces the reported Wilds + Unique load stack.
+do
+local sourceData = T.fixtures.fresh()
+sourceData.icons = { icons = {}, byDex = {}, bySpecies = {} }
+sourceData.palettes = data.palettes
+Font.load(sourceData)
+local sourceRun = T.sdk.loadMods({
+  "mods/modern_party_ui/tests/fixtures/unique_menu_icons",
+  "mods/modern_party_ui/tests/fixtures/wilds_of_kanto",
+  "mods/modern_party_ui",
+}, { data = sourceData, dev = true })
+T.eq(#sourceRun.errors, 0,
+  "loads beside Unique Menu Icons 1.5.0 and Wilds of Kanto")
+
+-- Model a runtime follower takeover after content has merged. The registry
+-- still retains Unique's owner/value pair even though the live table does not.
+for _, species in ipairs({ "FIXMON_A", "FIXMON_B", "FIXMON_C" }) do
+  sourceRun.data.icons.bySpecies[species] = {
+    image = "mods/follower_pack/assets/" .. species:lower() .. ".png",
+    frames = 6,
+    trueColor = true,
+  }
+end
+local sourceGame = {
+  data = sourceRun.data,
+  mods = sourceRun.loader,
+  save = { party = party, inventory = {}, options = {} },
+  stack = { states = {} },
+  input = { wasPressed = function() return false end },
+  renderer = { uiSize = function() return 320, 240 end },
+}
+local sourceScreen = sourceRun.data.screens.PartyMenu.new(sourceGame, {})
+local realSourceImage = Assets.image
+local realSourceImageData = Assets.imageData
+local realSourceDraw = graphics.draw
+local realSourcePartyIcon = PartyMenu.drawIcon
+local realSourceMark = PaletteFX.markTrueColor
+local sourcePaths, sharedFollowerCalls, sourceMarks = {}, 0, {}
+local sourceImageData = {}
+function sourceImageData:getDimensions() return 16, 96 end
+function sourceImageData:getPixel(px, py)
+  return 1, 1, 1, px >= 3 and px <= 12 and py % 16 >= 2
+    and py % 16 <= 13 and 1 or 0
+end
+Assets.image = function(path)
+  local text = tostring(path)
+  if text:find("unique_menu_icons", 1, true) then
+    return {
+      path = text,
+      getDimensions = function() return 16, 32 end,
+      getWidth = function() return 16 end,
+      getHeight = function() return 32 end,
+    }
+  elseif text:find("overworld_wild_spawns", 1, true)
+      or text:find("follower_pack", 1, true) then
+    return {
+      path = text,
+      getDimensions = function() return 16, 96 end,
+      getWidth = function() return 16 end,
+      getHeight = function() return 96 end,
+    }
+  end
+  return realSourceImage(path)
+end
+Assets.imageData = function(path)
+  local text = tostring(path)
+  if text:find("unique_menu_icons", 1, true)
+      or text:find("overworld_wild_spawns", 1, true)
+      or text:find("follower_pack", 1, true) then
+    return sourceImageData
+  end
+  return realSourceImageData(path)
+end
+PartyMenu.drawIcon = function()
+  sharedFollowerCalls = sharedFollowerCalls + 1
+  return true
+end
+graphics.draw = function(image, ...)
+  if type(image) == "table" and image.path
+      and (image.path:find("unique_menu_icons", 1, true)
+        or image.path:find("overworld_wild_spawns", 1, true)
+        or image.path:find("follower_pack", 1, true)) then
+    sourcePaths[#sourcePaths + 1] = image.path
+  end
+  return realSourceDraw(image, ...)
+end
+PaletteFX.markTrueColor = function(x, y, w, h)
+  sourceMarks[#sourceMarks + 1] = { x = x, y = y, w = w, h = h }
+end
+
+sourceRun.loader.modOptions.modern_party_ui = { sprite_source = "menu_pack" }
+local menuPackOK, menuPackErr = pcall(sourceScreen.draw, sourceScreen)
+T.check(menuPackOK,
+  "MENU PACK draws with a live follower override: " .. tostring(menuPackErr))
+T.eq(sharedFollowerCalls, 0,
+  "MENU PACK bypasses the follower-owned global PartyMenu renderer")
+T.eq(#sourcePaths, #party,
+  "MENU PACK draws one explicit Unique Menu Icons contribution per card")
+for i, path in ipairs(sourcePaths) do
+  T.check(path:find("unique_menu_icons", 1, true) ~= nil,
+    "MENU PACK card " .. i .. " uses Unique Menu Icons rather than followers")
+end
+T.eq(#sourceRun.loader.exports.overworld_wild_spawns.calls, 0,
+  "MENU PACK does not query the Wilds follower resolver")
+T.eq(#sourceMarks, #party,
+  "full-colour menu-pack icons retain one stable composite per card")
+
+sourcePaths, sourceMarks = {}, {}
+sourceRun.loader.modOptions.modern_party_ui = {
+  sprite_source = "follower_pack",
+}
+local followerPackOK, followerPackErr = pcall(sourceScreen.draw, sourceScreen)
+T.check(followerPackOK,
+  "FOLLOWER PACK still draws after source separation: "
+    .. tostring(followerPackErr))
+T.eq(#sourcePaths, #party,
+  "FOLLOWER PACK draws one Wilds sprite per occupied card")
+for i, path in ipairs(sourcePaths) do
+  T.check(path:find("overworld_wild_spawns", 1, true) ~= nil,
+    "FOLLOWER PACK card " .. i .. " uses the Wilds resolver")
+end
+
+Assets.image = realSourceImage
+Assets.imageData = realSourceImageData
+graphics.draw = realSourceDraw
+PartyMenu.drawIcon = realSourcePartyIcon
+PaletteFX.markTrueColor = realSourceMark
+sourceRun.release()
 end
 
 -- QoL Toggles PARTY SCROLL changes the live SummaryMenu's mon and native

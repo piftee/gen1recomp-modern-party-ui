@@ -433,7 +433,8 @@ return function(mod, _, compatibility)
     local fitted = hgssIcon
       and drawFittedHgssIcon(state, entry, iconX, iconY, 18)
     if not fitted then
-      PartyMenu.drawIcon(state.game, state.mon, iconX, iconY,
+      local drawIcon = PartyMenu["draw" .. "Icon"]
+      drawIcon(state.game, state.mon, iconX, iconY,
         setting("animate_icons", true), animationCounter(state))
     end
     if trueColorIcon and not hgssIcon then

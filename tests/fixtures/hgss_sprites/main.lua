@@ -1,4 +1,4 @@
--- Relevant behavior from HGSS Visual Overhaul 1.0.0: its shared party icon
+-- Relevant behavior from HGSS Visual Overhaul 1.0.2: its shared party icon
 -- renderer draws native 32x32 artwork and protects that complete rectangle.
 return function(mod)
   local PartyMenu = require("src.ui.PartyMenu")

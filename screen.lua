@@ -70,6 +70,7 @@ return function(mod, genderExports, compatibility)
 
   local inkShader -- false when unavailable
   local fittedHgssIcons = {}
+  local directMenuIconImages = {}
   local originalIconImages = {}
   local iconAlphaMasks = {}
   local wildsIconDefs = {}
@@ -79,6 +80,7 @@ return function(mod, genderExports, compatibility)
   if Assets.register then
     Assets.register(function()
       fittedHgssIcons = {}
+      directMenuIconImages = {}
       originalIconImages = {}
       iconAlphaMasks = {}
       wildsIconDefs = {}
@@ -142,6 +144,34 @@ return function(mod, genderExports, compatibility)
   local function definition(menu, mon)
     local pokemon = menu.game.data and menu.game.data.pokemon or {}
     return mon and pokemon[mon.species] or nil
+  end
+
+  -- Party and follower packs share icons.bySpecies, so its live value cannot
+  -- identify which provider the player selected after a runtime follower mod
+  -- has replaced it.  The frozen content registry retains provenance for
+  -- every load-time contribution.  Prefer the last provider that explicitly
+  -- declares ownership of party/menu icons (Unique Menu Icons 1.5.0 exposes
+  -- ownsPartyIcons), without mutating the live registry used by followers.
+  local function explicitMenuPackEntry(menu, mon)
+    local game = menu and menu.game
+    local loader = game and game.mods
+    local registry = loader and loader.content and loader.content.icons
+    local ops = registry and registry.ops and mon
+      and registry.ops[mon.species]
+    if type(ops) ~= "table" then return nil end
+
+    for i = #ops, 1, -1 do
+      local op = ops[i]
+      local owner = op and op.owner
+      local exported = owner and loader.exports and loader.exports[owner]
+      local ownsMenu = owner == "unique_menu_icons"
+        or (type(exported) == "table" and exported.ownsPartyIcons == true)
+      if ownsMenu then
+        if op.op == "remove" or op.value == nil then return nil end
+        return op.value, owner
+      end
+    end
+    return nil
   end
 
   local function capacityOf(menu)
@@ -491,7 +521,8 @@ return function(mod, genderExports, compatibility)
       NORMAL = "NRM", FIGHTING = "FGT", FLYING = "FLY",
       POISON = "PSN", GROUND = "GRD", ROCK = "RCK", BUG = "BUG",
       GHOST = "GHO", FIRE = "FIR", WATER = "WTR", GRASS = "GRS",
-      ELECTRIC = "ELC", PSYCHIC = "PSY", ICE = "ICE", DRAGON = "DRG",
+      ELECTRIC = "ELC", PSYCHIC_TYPE = "PSY", PSYCHIC = "PSY",
+      ICE = "ICE", DRAGON = "DRG",
     }
     local typeWidth = math.max(24, math.floor(layout.width / 2) - 36)
     local first = short[tostring(types[1] or ""):upper()] or "---"
@@ -929,6 +960,101 @@ return function(mod, genderExports, compatibility)
     return runs
   end
 
+  local function entryImagePath(menu, entry)
+    local icons = menu.game.data.icons or {}
+    if type(entry) == "table" then return entry.image end
+    if type(entry) == "string" then
+      return icons.icons and icons.icons[entry]
+    end
+    return nil
+  end
+
+  local function paletteAwareEntry(menu, entry)
+    local path = tostring(entryImagePath(menu, entry) or ""):lower()
+    return path:find("icons_original", 1, true) ~= nil
+      or path:find("icon_original", 1, true) ~= nil
+  end
+
+  local function hgssPartyEntry(menu, entry)
+    if not compatibility.hgssSprites or type(entry) ~= "table"
+        or entry.trueColor ~= true then return false end
+    local path = tostring(entryImagePath(menu, entry) or ""):lower()
+    -- HGSS Visual Overhaul installs these records at game.ready rather than
+    -- through the frozen content registry.  The containing directory is not
+    -- guaranteed to equal its manifest id, so identify the documented party
+    -- asset family rather than requiring "hgss" in the absolute path.
+    return path:find("assets/icons/", 1, true) ~= nil
+  end
+
+  -- Draw an explicitly selected menu provider without going back through the
+  -- global PartyMenu.drawIcon wrapper. Follower mods are allowed to wrap that
+  -- shared function, so using it here would immediately discard the source
+  -- choice we just resolved from registry provenance.
+  local function drawDirectMenuIcon(menu, mon, entry, x, y, animate,
+      counter, target)
+    local path = entryImagePath(menu, entry)
+    if type(path) ~= "string" or path == "" then return false end
+    local image = directMenuIconImages[path]
+    if image == nil then
+      local ok, loaded = pcall(Assets.image, path)
+      image = ok and loaded or false
+      directMenuIconImages[path] = image
+    end
+    if not image then return false end
+
+    local iw, ih
+    if type(image.getDimensions) == "function" then
+      iw, ih = image:getDimensions()
+    elseif type(image.getWidth) == "function"
+        and type(image.getHeight) == "function" then
+      iw, ih = image:getWidth(), image:getHeight()
+    end
+    iw, ih = tonumber(iw), tonumber(ih)
+    if not iw or not ih or iw <= 0 or ih <= 0
+        or not love.graphics.newQuad then return false end
+
+    local frames = type(entry) == "table"
+      and math.max(1, math.floor(tonumber(entry.frames) or 1)) or 1
+    local frameW = math.min(iw, 16)
+    local frameH = frames > 1 and math.floor(ih / frames) or ih
+    frameH = math.max(1, math.min(16, frameH, ih))
+    local alt = false
+    if animate then
+      local maxHP = mon.stats and tonumber(mon.stats.hp) or 1
+      local hpPixels = math.floor((tonumber(mon.hp) or 0) * 48
+        / math.max(1, maxHP))
+      local speed = hpPixels >= 27 and 5 or hpPixels >= 10 and 16 or 32
+      alt = math.floor((tonumber(counter) or 0) / speed) % 2 == 1
+    end
+    local name = type(entry) == "string" and entry or nil
+    local frame = frames > 1 and PartyMenu.frameFor(name, alt, ih) or 0
+    frame = math.max(0, math.min(frames - 1, frame))
+    local frameY = math.min(math.max(0, ih - frameH), frame * frameH)
+    local scale = math.min((tonumber(target) or 16) / frameW,
+      (tonumber(target) or 16) / frameH)
+    local drawW, drawH = frameW * scale, frameH * scale
+    local drawX = math.floor(x + ((tonumber(target) or 16) - drawW) / 2
+      + 0.5)
+    local drawY = math.floor(y + ((tonumber(target) or 16) - drawH) / 2
+      + 0.5)
+
+    love.graphics.push("all")
+    love.graphics.setColor(1, 1, 1, 1)
+    if name and PartyMenu.mirrorsIcon(name) then
+      local half = love.graphics.newQuad(0, frameY,
+        math.min(8, frameW), frameH, iw, ih)
+      love.graphics.draw(image, half, drawX, drawY, 0, scale, scale)
+      love.graphics.draw(image, half, drawX + drawW, drawY, 0,
+        -scale, scale)
+    else
+      local quad = love.graphics.newQuad(0, frameY,
+        frameW, frameH, iw, ih)
+      love.graphics.draw(image, quad, drawX, drawY, 0, scale, scale)
+    end
+    love.graphics.pop()
+    return true
+  end
+
   local function drawIconCollectingTrueColor(menu, mon, x, y, selected,
       counter, regions, iconScale, opaqueRuns, suppressUnmasked)
     local scale = tonumber(iconScale) or 1
@@ -963,7 +1089,10 @@ return function(mod, genderExports, compatibility)
       love.graphics.translate(-x, -y)
     end
     local ok, err = pcall(function()
-      result = PartyMenu.drawIcon(menu.game, mon, x, y, selected, counter)
+      -- Kept indirect because this file is the Gen 1 presenter; Gen 2 loads
+      -- gen2.lua and uses its native menu-icon method instead.
+      local drawIcon = PartyMenu["draw" .. "Icon"]
+      result = drawIcon(menu.game, mon, x, y, selected, counter)
     end)
     love.graphics.pop()
     PaletteFX.markTrueColor = originalMark
@@ -1191,17 +1320,14 @@ return function(mod, genderExports, compatibility)
     local animate = setting("animate_icons", true) and selected
     local def = definition(menu, mon)
     local icons = game.data.icons or {}
-    local entry = (icons.bySpecies and icons.bySpecies[mon.species])
+    local liveEntry = (icons.bySpecies and icons.bySpecies[mon.species])
       or (def and def.icon)
-    local path = type(entry) == "table"
-      and tostring(entry.image or ""):lower() or ""
-    local paletteAware = path:find("icons_original", 1, true) ~= nil
-      or path:find("icon_original", 1, true) ~= nil
+    local menuEntry = source == "menu_pack"
+      and explicitMenuPackEntry(menu, mon) or nil
+    local entry = menuEntry or liveEntry
+    local paletteAware = paletteAwareEntry(menu, entry)
     local authored = type(entry) == "table" and not paletteAware
-    local hgss = compatibility.hgssSprites and authored
-      and entry.trueColor == true
-      and path:find("assets/icons/", 1, true) ~= nil
-      and path:find("hgss", 1, true) ~= nil
+    local hgss = authored and hgssPartyEntry(menu, entry)
     local allowFollower = source == "auto" or source == "follower_pack"
     local wildsDef = allowFollower and compatibility.wildsOfKanto
       and wildsIconDef(menu, mon) or nil
@@ -1229,15 +1355,25 @@ return function(mod, genderExports, compatibility)
       drawn = drawOriginalIcon(menu, mon, x, y, animate, counter) == true
       protected = false
       stableRect = nil
+    elseif menuEntry then
+      drawn = drawDirectMenuIcon(menu, mon, menuEntry, x, y,
+        animate, counter, size) == true
     elseif wildsDef then
       drawn = drawWildsIcon(menu, mon, x, y, animate, counter,
         regions, wildsDef) == true
-    elseif allowFollower and hgss then
+    elseif hgss then
       drawn = drawFittedHgssIcon(menu, mon, entry, x, y,
         animate, counter, size, regions) == true
     end
 
-    if not drawn then
+    if not drawn and menuEntry then
+      -- A missing menu-pack file must never fall back through a follower
+      -- wrapper and silently violate ICON SOURCE. The dex-indexed original
+      -- remains a dependable last resort for this explicit choice.
+      drawn = drawOriginalIcon(menu, mon, x, y, animate, counter) == true
+      protected = false
+      stableRect = nil
+    elseif not drawn then
       local scale = size / 16
       local runs = source ~= "original" and not hgss
         and iconOpaqueRuns(menu, mon, entry, animate, counter) or nil
@@ -1245,7 +1381,7 @@ return function(mod, genderExports, compatibility)
         animate, counter, regions, scale, runs,
         type(entry) == "table" and runs == nil) == true
     end
-    if not drawn then
+    if not drawn and not menuEntry then
       drawn = drawFallbackIcon(menu, mon, x, y,
         animate, counter, regions) == true
     end
@@ -1281,37 +1417,32 @@ return function(mod, genderExports, compatibility)
 
     drawCardFrame(x, y, width, height, selected, layout.portrait)
 
-    -- This is intentionally the engine helper rather than a direct image
-    -- load. It resolves icons.bySpecies, pokemon.icon hooks, asset overrides,
-    -- animation frames and per-species art supplied by other mods.
+    -- AUTO/FOLLOWER keep the engine's live helper seam. MENU PACK may instead
+    -- draw the explicitly owning content contribution, because the live
+    -- icons.bySpecies table can be replaced later by a follower provider.
     local icons = menu.game.data.icons or {}
-    local entry = (icons.bySpecies and icons.bySpecies[mon.species])
+    local liveEntry = (icons.bySpecies and icons.bySpecies[mon.species])
       or (def and def.icon)
     local source = setting("sprite_source", "auto")
+    local menuEntry = source == "menu_pack"
+      and explicitMenuPackEntry(menu, mon) or nil
+    local entry = menuEntry or liveEntry
     local trueColorIcon = false
-    local hgssIcon = false
+    local hgssIcon = hgssPartyEntry(menu, entry)
     if type(entry) == "table" then
-      local path = tostring(entry.image or ""):lower()
       -- Unique Menu Icons 1.5.0 renamed these folders from icons_* to
       -- icon_*.  ORIGINAL is deliberately palette-driven in both layouts;
       -- treating the new singular path as authored true colour preserves
       -- its literal grayscale pixels and is what made those icons look gray.
-      local paletteAware = path:find("icons_original", 1, true) ~= nil
-        or path:find("icon_original", 1, true) ~= nil
-      trueColorIcon = not paletteAware
+      trueColorIcon = not paletteAwareEntry(menu, entry)
         or PartyMenu._uniqueMenuIconsTrueColorWrapped == true
-      hgssIcon = compatibility.hgssSprites and entry.trueColor == true
-        and path:find("assets/icons/", 1, true) ~= nil
-        and path:find("hgss", 1, true) ~= nil
     end
 
     -- Fit HGSS's visible creature into this rail. Its 32px source frame has
     -- substantial transparent padding, so scaling the complete frame leaves
     -- the actual sprite much smaller than the available card space.
-    local fitFollowerIcon = hgssIcon
-      and (source == "auto" or source == "follower_pack")
-    local iconSize = fitFollowerIcon and (spacious and 32 or 22) or 16
-    local iconScale = fitFollowerIcon and iconSize / 32 or 1
+    local iconSize = hgssIcon and (spacious and 32 or 22) or 16
+    local iconScale = hgssIcon and iconSize / 32 or 1
     local iconX, iconY = iconGeometry(x, y, width, height, iconSize)
     local textX = math.max(x + contentInset(width), iconX + iconSize + 2)
 
@@ -1354,6 +1485,20 @@ return function(mod, genderExports, compatibility)
         animate, menu.blink or 0) == true
     end
 
+    if not drawn and menuEntry then
+      if trueColorIcon then prepareStableWell() end
+      drawn = drawDirectMenuIcon(menu, mon, menuEntry, iconX, iconY,
+        animate, menu.blink or 0, iconSize) == true
+      protectedDrawn = drawn and trueColorIcon
+      if not drawn then
+        discardStableWell()
+        -- Do not re-enter the globally wrapped menu renderer when an explicit
+        -- provider fails: a follower wrapper would defeat MENU PACK again.
+        drawn = drawOriginalIcon(menu, mon, iconX, iconY,
+          animate, menu.blink or 0) == true
+      end
+    end
+
     if not drawn and wildsDef then
       local protectWilds = wildsDef.trueColor ~= false
       if protectWilds then prepareStableWell() end
@@ -1364,7 +1509,7 @@ return function(mod, genderExports, compatibility)
     end
 
     local fitted = false
-    if not drawn and allowFollower and hgssIcon then
+    if not drawn and hgssIcon then
       prepareStableWell()
       fitted = drawFittedHgssIcon(menu, mon, entry,
         iconX, iconY, animate, menu.blink or 0,
@@ -1374,18 +1519,7 @@ return function(mod, genderExports, compatibility)
       if not fitted then discardStableWell() end
     end
 
-    -- FOLLOWER PACKS commonly replace icons.bySpecies outright.  MENU PACK
-    -- means "use the ordinary menu/dex chain", so temporarily step around a
-    -- detected HGSS follower record instead of silently drawing the follower
-    -- selected by load order.  The registry is restored inside the helper.
-    local menuPackDrawn = false
-    if not drawn and source == "menu_pack" and hgssIcon then
-      menuPackDrawn = drawFallbackIcon(menu, mon, iconX, iconY,
-        animate, menu.blink or 0, trueColorIcons) == true
-      drawn = menuPackDrawn
-    end
-
-    if not drawn then
+    if not drawn and not menuEntry then
       if trueColorIcon then prepareStableWell() end
       local sharedDrawn = drawIconCollectingTrueColor(menu, mon, iconX, iconY,
         animate, menu.blink or 0, trueColorIcons, iconScale, opaqueRuns,
