@@ -1,4 +1,4 @@
--- Models Wilds of Kanto 2.1.7's stable follower-sprite export. Deliberately
+-- Models Wilds of Kanto 2.2.0's stable follower-sprite export. Deliberately
 -- does not own PartyMenu.drawIcon: the compatibility regression is the load
 -- order where another mod replaces that shared renderer after Wilds loads.
 return function(mod)

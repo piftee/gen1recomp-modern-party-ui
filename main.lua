@@ -125,15 +125,22 @@ return function(mod)
         local OptionsMenu = require("src.ui.OptionsMenu")
         local page = OptionsMenu.new(g)
         -- OptionsMenu.new invokes this hook while constructing itself. Its
-        -- resulting main rows are intentionally replaced with the dedicated
-        -- schema page before the screen is shown.
-        page.rows = optionRows()
-        page.index, page.scroll = 1, 0
+        -- resulting source and cached visible rows are both replaced with the
+        -- dedicated schema page before the screen is shown.
+        local rows = optionRows()
+        page.rows, page.view = rows, rows
+        page.index, page.scroll, page.sub = 1, 0, true
         g.stack:push(page)
       end,
     }
     return out
   end)
+
+  local GameVersion = require("src.core.GameVersion")
+  if type(GameVersion.generation) == "function"
+      and GameVersion.generation() == 2 then
+    return require("mods.modern_party_ui.gen2")(mod)
+  end
 
   local genderMod = mod.find("gender_mod")
   local genderExports = genderMod and genderMod.exports or nil
@@ -142,6 +149,7 @@ return function(mod)
   local dramaticShape = mod.find("DRAMATIC_SHAPE")
   local crystal251 = mod.find("CRYSTAL_251")
   local wildsOfKanto = mod.find("overworld_wild_spawns")
+  local movesManager = mod.find("moves_manager")
   local compatibility = {
     dvTracker = mod.find("dv_tracker") ~= nil,
     kantoRibbons = kantoRibbons ~= nil,
@@ -158,6 +166,8 @@ return function(mod)
     hgssSprites = mod.find("HGSS_SPRITES") ~= nil,
     wildsOfKanto = wildsOfKanto ~= nil,
     wildsOfKantoExports = wildsOfKanto and wildsOfKanto.exports or nil,
+    movesManager = movesManager ~= nil,
+    movesManagerExports = movesManager and movesManager.exports or nil,
   }
 
   local function loadScreen(filename, label)
@@ -385,6 +395,17 @@ return function(mod)
         layer = "screen",
         canSuppressNative = false,
       },
+      ModernPartyMovesManager = {
+        match = function(state)
+          return type(state) == "table"
+            and state.modernPartyMovesManager == true
+        end,
+        model = function(game, state)
+          return partyTools.movesManagerModel(state, game)
+        end,
+        layer = "screen",
+        canSuppressNative = false,
+      },
     },
   }
 
@@ -423,6 +444,9 @@ return function(mod)
   end
   if compatibility.hgssSprites then
     adapters[#adapters + 1] = "HGSS Visual Overhaul"
+  end
+  if compatibility.movesManager then
+    adapters[#adapters + 1] = "FAFFO's Moves Manager"
   end
   local suffix = #adapters > 0 and (" with " .. table.concat(adapters, ", "))
     or ""

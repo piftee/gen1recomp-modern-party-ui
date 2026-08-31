@@ -625,6 +625,12 @@ return function(mod)
     installSurface(state, parent)
     state.modernPartyRelearn = true
     state.draw = function(self)
+      -- Relearn can be pushed while the party roster is still contributing
+      -- true-colour menu-icon regions to the current UI pass.  It owns an
+      -- opaque screen, so discard those inherited claims before drawing its
+      -- cards just as the summary and naming screens do.  World/voxel claims
+      -- live in a separate pass and are deliberately left untouched.
+      clearInheritedUiTrueColor()
       local width, height = self:uiSize()
       local rows = self.items or self.moves or self.rows or {}
       backdrop(width, height, "RELEARN", "A CHOOSE    B BACK")
@@ -652,6 +658,190 @@ return function(mod)
     return true
   end
 
+  local function movesFooter(model)
+    local footer = model and model.footer
+    if type(footer) ~= "table" then return tostring(footer or "B BACK") end
+    local labels = {}
+    for _, label in ipairs(footer) do
+      label = tostring(label or "")
+      if label ~= "" then labels[#labels + 1] = label end
+    end
+    return #labels > 0 and table.concat(labels, "   ") or "B BACK"
+  end
+
+  local function fallbackMovesModel(state)
+    local rows = {}
+    if state.mode == "pool" then
+      for _, entry in ipairs(state.pool or {}) do
+        rows[#rows + 1] = {
+          label = entry.name or entry.label or entry.id or "MOVE",
+          value = entry.type or "",
+          enabled = true,
+        }
+      end
+      return {
+        title = "REMEMBERED MOVES",
+        rows = rows,
+        index = state.poolIndex or state.index or 1,
+        scroll = state.poolScroll or state.scroll or 0,
+        footer = { "A DETAILS", "B BACK" },
+      }
+    end
+
+    if state.mode == "known" or state.mode == nil then
+      local gameMoves = state.game and state.game.data
+        and state.game.data.moves or {}
+      for i = 1, 4 do
+        local move = state.mon and state.mon.moves and state.mon.moves[i]
+        local def = move and gameMoves[move.id] or nil
+        rows[i] = {
+          label = move and ((def and def.name) or move.id) or "EMPTY SLOT",
+          value = move and ("PP %d/%d"):format(move.pp or 0,
+            (def and def.pp) or move.pp or 0) or "--",
+          marker = state.swapSlot == i,
+          enabled = true,
+        }
+      end
+      return {
+        title = "MOVES",
+        rows = rows,
+        index = state.slot or state.index or 1,
+        footer = state.swapSlot
+          and { "A/SELECT SWAP", "B CANCEL" }
+          or { "A DETAILS", "SELECT SWAP", "B BACK" },
+      }
+    end
+
+    return {
+      title = "MOVE DETAILS",
+      rows = { { label = "MOVE DATA", value = "PAGE "
+        .. tostring(state.detailPage or 1), enabled = false } },
+      index = 1,
+      footer = { "L/R PAGE", "A CHOOSE", "B BACK" },
+    }
+  end
+
+  local function movesModel(state)
+    local descriptor = state.modernPartyMovesDescriptor
+    if descriptor and type(descriptor.model) == "function" then
+      local ok, model = pcall(descriptor.model, state.game, state)
+      if ok and type(model) == "table" then return model end
+    end
+    return fallbackMovesModel(state)
+  end
+
+  local function drawMoveRow(row, x, y, width, height, selected)
+    row = type(row) == "table" and row or { label = tostring(row or "MOVE") }
+    card(x, y, width, height, selected)
+    local inset = 6
+    local label = tostring(row.label or row.name or "MOVE")
+    local value = tostring(row.value or "")
+    local twoLine = value ~= "" and height >= 22
+    if twoLine then
+      drawText(label, x + inset, y + 5, width - inset * 2, BLACK)
+      drawText(value, x + width - inset - Font.width(value),
+        y + height - 12, Font.width(value), BLACK)
+    else
+      local lineY = y + math.max(4, math.floor((height - 10) / 2))
+      local rightWidth = Font.width(value)
+      local labelWidth = width - inset * 2
+      if rightWidth > 0 then labelWidth = labelWidth - rightWidth - 4 end
+      drawText(label, x + inset, lineY, math.max(8, labelWidth), BLACK)
+      if value ~= "" then
+        drawText(value, x + width - inset - rightWidth, lineY,
+          rightWidth, BLACK)
+      end
+    end
+    -- A small solid wedge is legible in every Gen 1 font pack and does not
+    -- compete with PP. It reflects the source model's marker (swap/choose)
+    -- without inventing another controller state.
+    if row.marker then
+      gray(BLACK)
+      local markerY = y + height - 7
+      if love.graphics.polygon then
+        love.graphics.polygon("fill", {
+          x + inset, markerY - 2,
+          x + inset + 4, markerY + 1,
+          x + inset, markerY + 4,
+        })
+      else
+        love.graphics.rectangle("fill", x + inset, markerY, 3, 3)
+      end
+    end
+  end
+
+  local function drawMovesManager(state)
+    clearInheritedUiTrueColor()
+    local width, height = state:uiSize()
+    local model = movesModel(state)
+    local rows = type(model.rows) == "table" and model.rows or {}
+    local index = math.max(1, tonumber(model.index) or 1)
+    backdrop(width, height, model.title or "MOVES", movesFooter(model))
+
+    local left, topY = 5, 19
+    local usableW, usableH = width - 10, height - 30
+    if #rows == 0 then
+      card(left, topY, usableW, math.min(28, usableH), true)
+      centered("NO MOVES AVAILABLE", left + 4, topY + 9,
+        usableW - 10, BLACK)
+      gray(WHITE)
+      return
+    end
+
+    if state.mode == "known" or state.mode == nil then
+      local gap = 3
+      local cellW = math.floor((usableW - gap) / 2)
+      local cellH = math.floor((usableH - gap) / 2)
+      for i = 1, math.min(4, #rows) do
+        local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
+        drawMoveRow(rows[i], left + col * (cellW + gap),
+          topY + row * (cellH + gap), cellW, cellH, i == index)
+      end
+    elseif state.mode == "pool" then
+      local visible = math.max(1, math.min(#rows,
+        math.floor(usableH / 18)))
+      local scroll = math.max(0, tonumber(model.scroll) or 0)
+      if index <= scroll then scroll = index - 1 end
+      if index > scroll + visible then scroll = index - visible end
+      scroll = math.max(0, math.min(scroll, math.max(0, #rows - visible)))
+      local rowH = math.max(16, math.floor(usableH / visible))
+      for slot = 1, visible do
+        local i = scroll + slot
+        if not rows[i] then break end
+        drawMoveRow(rows[i], left, topY + (slot - 1) * rowH,
+          usableW, rowH - 2, i == index)
+      end
+    else
+      -- Detail pages can contain up to ten semantic rows. Two balanced
+      -- columns preserve every field on the native 160x144 surface and avoid
+      -- the clipped right edge that a scaled source renderer would create.
+      local columns = #rows > 5 and 2 or 1
+      local perColumn = math.ceil(#rows / columns)
+      local gap = 3
+      local cellW = math.floor((usableW - gap * (columns - 1)) / columns)
+      local cellH = math.max(15, math.floor(usableH / perColumn))
+      for i, item in ipairs(rows) do
+        local col = math.floor((i - 1) / perColumn)
+        local row = (i - 1) % perColumn
+        drawMoveRow(item, left + col * (cellW + gap),
+          topY + row * cellH, cellW, cellH - 2,
+          i == index and item.enabled ~= false)
+      end
+    end
+    gray(WHITE)
+  end
+
+  local function decorateMovesManager(state, parent, descriptor)
+    if type(state) ~= "table" or state.modernPartyMovesManager then
+      return false
+    end
+    installSurface(state, parent)
+    state.modernPartyMovesManager = true
+    state.modernPartyMovesDescriptor = descriptor
+    state.draw = drawMovesManager
+    return true
+  end
+
   top = function(game)
     local stack = game and game.stack
     if not stack then return nil end
@@ -674,6 +864,48 @@ return function(mod)
   end
 
   local installed = false
+  local movesManagerInstalled = false
+  local function installMovesManager()
+    if movesManagerInstalled then return true end
+    local handle = type(mod.find) == "function" and mod.find("moves_manager")
+      or nil
+    local exports = handle and handle.exports or nil
+    local contract = exports and exports.gen1ModernUi or nil
+    local descriptor = contract and contract.screens
+      and contract.screens.moves_manager or nil
+    local inherited = mod.content.screens:get("MovesManager")
+    local inheritedNew = type(inherited) == "function" and inherited
+      or (type(inherited) == "table" and inherited.new)
+    if type(inheritedNew) ~= "function" then return false end
+
+    -- Moves Manager registers its Gen1 Modern UI adapter before this mod.
+    -- Exclude only the states we decorate so that compositor reaches Modern
+    -- Party UI's non-suppressing adapter below; raw Moves Manager screens keep
+    -- their original responsive Modern UI path.
+    if descriptor and type(descriptor.match) == "function"
+        and not descriptor._modernPartySourceMatch then
+      local sourceMatch = descriptor.match
+      descriptor._modernPartySourceMatch = sourceMatch
+      descriptor.match = function(state)
+        if type(state) == "table" and state.modernPartyMovesManager then
+          return false
+        end
+        return sourceMatch(state)
+      end
+    end
+
+    mod.content.screens:override("MovesManager", {
+      new = function(game, mon, ...)
+        local parent = top(game)
+        local state = inheritedNew(game, mon, ...)
+        decorateMovesManager(state, parent, descriptor)
+        return state
+      end,
+    })
+    movesManagerInstalled = true
+    return true
+  end
+
   local function install()
     if installed then return end
     installed = true
@@ -707,6 +939,7 @@ return function(mod)
       end
       return out
     end, 10000)
+    installMovesManager()
   end
 
   return {
@@ -714,6 +947,9 @@ return function(mod)
     install = install,
     decorateNaming = decorateNaming,
     decorateRelearn = decorateRelearn,
+    decorateMovesManager = decorateMovesManager,
+    installMovesManager = installMovesManager,
+    movesManagerModel = movesModel,
     namingScreenRecord = namingScreenRecord,
   }
 end

@@ -1,0 +1,10 @@
+{
+  "id": "unique_menu_icons",
+  "name": "Unique Menu Icons Compatibility Fixture",
+  "version": "1.5.0",
+  "api": 2,
+  "entry": "main.lua",
+  "profile": "content",
+  "priority": 20,
+  "permissions": ["engine_internals"]
+}

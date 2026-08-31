@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.4.5 - 2026-08-29
+
+- Gen 1 Psychic Pokémon now show `PSY` in the party header instead of `---`;
+  the compact label accepts the engine's canonical `PSYCHIC_TYPE` identifier.
+- `ICON SOURCE: MENU PACK` now resolves the icon provider that explicitly
+  owns party/menu art instead of trusting a live `icons.bySpecies` table that
+  a follower mod may have replaced later. Unique Menu Icons therefore remains
+  selected alongside Wilds of Kanto, while `FOLLOWER PACK` still selects
+  Wilds' exported follower sheets.
+- HGSS Visual Overhaul 1.0.2 party sheets are now treated as menu art under
+  `MENU PACK`. Their visible alpha bounds are cropped, enlarged and centred in
+  the complete 32-pixel card rail rather than falling back to a tiny vanilla
+  icon or scaling the padded 32x32 source canvas.
+
+## 0.4.4 - 2026-08-28
+
+- Added a responsive presentation adapter for FAFFO's Moves Manager 1.0.1.
+  Its current-move grid, remembered-move list and all three detail pages now
+  match Modern Party UI while Moves Manager remains responsible for move
+  memory, PP data, HM protection, reordering and replacement callbacks.
+- Prevented Gen1 Modern UI from suppressing only the Moves Manager states
+  already presented by Modern Party UI. The source adapter remains unchanged
+  for undecorated screens and unusual load orders.
+- Moves Manager pages clear inherited UI sprite claims before drawing, avoiding
+  the grey rectangles seen when menu-icon packs opened a child screen during
+  the same frame.
+
+## 0.4.3 - 2026-08-27
+
+- Gen 2's dedicated Modern Party options page now drives its own setting rows
+  instead of falling through to the cached parent Options list.
+
+## 0.4.2 - 2026-08-27
+
+- Gen 2's true-wide move-management screen now follows its visible 2x2 card
+  grid: Left/Right cross a row and Up/Down cross a column. The native 160x144
+  vertical-list controls remain unchanged.
+
+## 0.4.1 - 2026-08-26
+
+- Relearn now clears inherited UI-only true-colour sprite regions before its
+  opaque move list is drawn, preventing custom party icons from reappearing as
+  grey boxes over move cards while leaving world and voxel rendering intact.
+
 ## 0.4.0 - 2026-08-25
 
 - Move cards on the Pokémon summary are now selectable. Press A on a learned

@@ -16,5 +16,17 @@ tests/fixtures/dramatic_shape_shinies/main.lua
 tests/fixtures/dramatic_shape_shinies/manifest.json
 tests/fixtures/crystal_251_split/main.lua
 tests/fixtures/crystal_251_split/manifest.json
+tests/fixtures/anytime_rename/main.lua
+tests/fixtures/anytime_rename/manifest.json
+tests/fixtures/hgss_sprites/main.lua
+tests/fixtures/hgss_sprites/manifest.json
+tests/fixtures/qol_toggles/main.lua
+tests/fixtures/qol_toggles/manifest.json
+tests/fixtures/wilds_of_kanto/main.lua
+tests/fixtures/wilds_of_kanto/manifest.json
+tests/fixtures/unique_menu_icons/main.lua
+tests/fixtures/unique_menu_icons/manifest.json
+tests/fixtures/moves_manager/main.lua
+tests/fixtures/moves_manager/manifest.json
 .gitignore
 .github/
