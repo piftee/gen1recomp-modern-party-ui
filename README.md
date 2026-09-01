@@ -8,7 +8,9 @@ shared with Typed Move Colors.
 
 Gold, Silver, and Crystal use generation-specific party, summary, and naming
 presenters over the native Gen 2 controllers, icons, HP bars, held items, and
-field-move behavior.
+field-move behavior. Wide party screens use the visible two-column card grid:
+Left/Right cross a row and Up/Down move between rows. The compact native list
+retains its original controls.
 
 **Persona: the nostalgic modernizer.** It is for players who want the clearer
 information hierarchy of newer Pokémon games without importing art from a

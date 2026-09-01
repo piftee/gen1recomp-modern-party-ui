@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.8 - 2026-09-01
+
+- Gen 1 TM/HM target cards now render `ABLE` and `NO` as ordinary card text
+  with no badge background. Unselected cards use light text and the selected
+  card uses dark text, matching the rest of each card's UI.
+- Gen 2 wide party screens now accept
+  Left/Right across each visible card row as well as Up/Down between rows.
+  Switch and Softboiled target selection use the same two-column controls.
+
 ## 0.4.5 - 2026-08-29
 
 - Gen 1 Psychic Pokémon now show `PSY` in the party header instead of `---`;
