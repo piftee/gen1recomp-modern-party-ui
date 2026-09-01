@@ -1,4 +1,5 @@
 tests/modern_party_ui_test.lua
+tests/gen2_party_navigation_test.lua
 tests/preview_driver.lua
 tests/fixtures/gender_mod/main.lua
 tests/fixtures/gender_mod/manifest.json

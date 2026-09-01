@@ -374,6 +374,52 @@ return function(mod)
     return other <= count and other or index
   end
 
+  -- The wide presenter lays the native six-slot list out as three rows of two
+  -- cards. Remember the active column when entering the full-width CANCEL row
+  -- so both axes continue to agree with the visible layout.
+  local function partyGridIndex(index, count, direction, allowCancel, column)
+    count = math.max(0, tonumber(count) or 0)
+    index = math.max(1, tonumber(index) or 1)
+    column = tonumber(column)
+    if column ~= 0 and column ~= 1 then column = nil end
+
+    local cancel = count + 1
+    if count == 0 then return allowCancel and cancel or index, column or 0 end
+
+    if index > count then
+      column = column or ((count - 1) % 2)
+      if direction == "up" then
+        local target = count
+        while target > 1 and (target - 1) % 2 ~= column do
+          target = target - 1
+        end
+        return target, column
+      elseif direction == "down" then
+        local target = column + 1
+        return target <= count and target or 1, column
+      end
+      return allowCancel and cancel or math.min(index, count), column
+    end
+
+    column = (index - 1) % 2
+    if direction == "left" then
+      return column == 1 and index - 1 or index, column == 1 and 0 or column
+    elseif direction == "right" then
+      local target = index + 1
+      if column == 0 and target <= count then return target, 1 end
+      return index, column
+    elseif direction == "up" then
+      local target = index - 2
+      if target >= 1 then return target, column end
+      return allowCancel and cancel or index, column
+    elseif direction == "down" then
+      local target = index + 2
+      if target <= count then return target, column end
+      return allowCancel and cancel or index, column
+    end
+    return index, column
+  end
+
   local function drawModernBackdrop(self)
     local G = love.graphics
     local width = self and self.modernPartyWideWidth or 160
@@ -799,6 +845,55 @@ return function(mod)
     menu.modernPartyGeneration = 2
     menu.classicGen2PartyPanel = menu.drawPanel
     menu.drawPanel = modernPartyPanel
+    local nativeUpdate = menu.update
+    if type(nativeUpdate) == "function" then
+      menu.classicGen2PartyUpdate = nativeUpdate
+      menu.update = function(self, dt)
+        local input = self.game and self.game.input
+        local renderedWidth = tonumber(self.modernPartyWideWidth)
+          or tonumber(self.modernPartyLastWideWidth) or 160
+
+        -- Action submenus and item-result messages keep their native vertical
+        -- controls. The two-column roster itself accepts all four directions,
+        -- including Switch and Softboiled's second-Pokémon pickers.
+        if renderedWidth >= 196 and input and input.wasPressed
+            and not self.submenu and not self.itemResult then
+          local direction
+          for _, key in ipairs({ "left", "right", "up", "down" }) do
+            if input:wasPressed(key) then direction = key break end
+          end
+          if direction then
+            local count = #(self.party or {})
+            local noCancel = self.switchFrom or self.softboiledFrom
+            local nextIndex, nextColumn = partyGridIndex(self.index, count,
+              direction, not noCancel, self.modernPartyGridColumn)
+            self.index = nextIndex or self.index
+            self.modernPartyGridColumn = nextColumn
+            if self.index <= count then
+              if type(self.storeCursor) == "function" then
+                self:storeCursor()
+              elseif self.game then
+                self.game.partyMenuCursor = self.index
+              end
+            end
+
+            -- Retain native clocks and A/B handling while preventing the
+            -- one-dimensional controller from applying a second movement.
+            local originalWasPressed = input.wasPressed
+            input.wasPressed = function(source, key)
+              if key == "left" or key == "right"
+                  or key == "up" or key == "down" then return false end
+              return originalWasPressed(source, key)
+            end
+            local ok, result = pcall(nativeUpdate, self, dt)
+            input.wasPressed = originalWasPressed
+            if not ok then error(result, 0) end
+            return result
+          end
+        end
+        return nativeUpdate(self, dt)
+      end
+    end
     installWideDraw(menu, menu.drawPanel, BACKDROP)
     return menu
   end

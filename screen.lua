@@ -689,8 +689,18 @@ return function(mod, genderExports, compatibility)
     gray(selected and DARK or WHITE)
     love.graphics.rectangle("fill", right - width, y, width, 8)
     drawText(text, right - width + math.floor(padding / 2), y,
-      width - padding, 1,
-      selected and WHITE or BLACK)
+      width - padding, 1, selected and WHITE or BLACK)
+  end
+
+  local function drawLearnability(text, right, y, selected, spacious)
+    if not text then return end
+    text = fitText(text, spacious and 40 or 24)
+    local padding = spacious and 4 or 0
+    local width = math.max(16, Font.width(text) + padding)
+    -- ABLE/NO is ordinary card ink: no lozenge, and the same contrast rule
+    -- as the name, level and TM/HM label on the card beneath it.
+    drawText(text, right - width + math.floor(padding / 2), y,
+      width - padding, 1, selected and BLACK or WHITE)
   end
 
   local function drawHealthBar(mon, x, y, width, height)
@@ -1575,7 +1585,11 @@ return function(mod, genderExports, compatibility)
       badge = statusLabel(shown)
     end
     if badge then
-      drawBadge(badge, x + width - 5, detailY, selected, spacious)
+      if menu.tmhm then
+        drawLearnability(badge, x + width - 5, detailY, selected, spacious)
+      else
+        drawBadge(badge, x + width - 5, detailY, selected, spacious)
+      end
     end
 
     if menu.tmhm then

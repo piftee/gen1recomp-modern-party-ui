@@ -786,11 +786,24 @@ T.eq(#noExpZones, 13,
 run.loader.modOptions.modern_party_ui = nil
 
 -- TM/HM mode retains learnability but emits no HP regions.
-local tm = record.new(game, { tmhm = { move = "FIX_CUT", kind = "HM" } })
-local tmZones = tm:sgbPalettes(game) or {}
-T.eq(#tmZones, 7, "TM/HM mode emits base + cards but no HP palettes")
-local tmOK, tmErr = pcall(tm.draw, tm)
-T.check(tmOK, "TM/HM mode draws headlessly: " .. tostring(tmErr))
+do
+  local tm = record.new(game, { tmhm = { move = "FIX_CUT", kind = "HM" } })
+  local tmZones = tm:sgbPalettes(game) or {}
+  T.eq(#tmZones, 7, "TM/HM mode emits base + cards but no HP palettes")
+  local tmBadgeFills = {}
+  local tmRectangle = graphics.rectangle
+  graphics.rectangle = function(mode, x, y, w, h, ...)
+    if mode == "fill" and h == 8 and w >= 16 and w <= 40 then
+      tmBadgeFills[#tmBadgeFills + 1] = { x = x, y = y, w = w, h = h }
+    end
+    return tmRectangle(mode, x, y, w, h, ...)
+  end
+  local tmOK, tmErr = pcall(tm.draw, tm)
+  graphics.rectangle = tmRectangle
+  T.check(tmOK, "TM/HM mode draws headlessly: " .. tostring(tmErr))
+  T.eq(#tmBadgeFills, 0,
+    "TM/HM learnability labels keep the card face instead of white badges")
+end
 
 -- Summary pages retain the original controller but use the same responsive
 -- type-card presentation and palette system as the party roster.
