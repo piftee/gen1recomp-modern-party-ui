@@ -1,5 +1,8 @@
 # Modern Party UI
 
+> [!IMPORTANT]
+> **This standalone mod has been superseded by [Modern UI Suite](https://github.com/piftee/gen1recomp-modern-ui-suite).** It remains available for existing installs, but future fixes and features will be maintained in the suite. Disable this standalone mod before enabling the suite; the suite imports its saved settings automatically.
+
 Modern Party UI rebuilds the POKéMON party screen and the built-in Pokémon
 summary pages with responsive cards while keeping Gen 1's own font, sprites
 and animated menu icons. Compatible information mods can add another modern
