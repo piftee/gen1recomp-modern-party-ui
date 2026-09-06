@@ -21,6 +21,7 @@ function NativePartyMenu.new(game, opts)
     index = 1,
     clock = 0,
   }
+  function menu:count() return #self.party + 1 end
   function menu:update()
     self.clock = self.clock + 1
     if self.game.input:wasPressed("up") then
@@ -83,6 +84,24 @@ eq(menu.index, 6, "wide RIGHT crosses the bottom card row")
 press("up")
 eq(menu.index, 4, "wide UP stays in the right card column")
 eq(menu.clock, 6, "the native controller receives every input update")
+
+for _, count in ipairs({2, 3, 6}) do
+  local members = {}
+  for i = 1, count do members[i] = {} end
+  menu = screens.Gen2PartyMenu.new({ input = input }, {
+    party = members, battle = true, prompt = "which",
+  })
+  menu.modernPartyLastWideWidth = 246
+  eq(menu:count(), count, "forced choice excludes Cancel with " .. count .. " Pokémon")
+  for index = 1, count do
+    for _, direction in ipairs({"up", "down"}) do
+      menu.index = index
+      press(direction)
+      eq(menu.index ~= index and menu.index >= 1 and menu.index <= count,
+        true, "forced " .. direction .. " leaves slot " .. index .. " of " .. count)
+    end
+  end
+end
 
 if failed > 0 then
   error(("%d of %d Gen 2 party navigation checks failed"):format(

@@ -31,3 +31,5 @@ tests/fixtures/moves_manager/main.lua
 tests/fixtures/moves_manager/manifest.json
 .gitignore
 .github/
+
+tests/gen2_refusal_driver.lua

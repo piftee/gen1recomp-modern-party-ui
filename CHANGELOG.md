@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.12] - 2026-09-05
+
+- Preserve Crystal Animated Sprites with Shiny Visuals normal/shiny colours
+  and animations in the Gen 2 summary. The native entrance sprite sheet no
+  longer replaces the companion's selected frames.
+
+## 0.4.10 - 2026-09-05
+
+- Gen 2: display native party refusal and item-result messages with an
+  A/B CONTINUE hint. A fainted replacement used to open an invisible message,
+  making navigation appear stuck until A or B was pressed.
+
+## 0.4.9 - 2026-09-05
+
+- Add Select pickup/drop and B cancellation for party reordering, with footer hints. Preserve native Gen 2 mail swaps. Fix forced-switch navigation getting trapped in a grid column with only one Pokémon.
+
 ## 0.4.8 - 2026-09-01
 
 - Gen 1 TM/HM target cards now render `ABLE` and `NO` as ordinary card text
