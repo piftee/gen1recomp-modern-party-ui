@@ -1617,9 +1617,13 @@ return function(mod, genderExports, compatibility)
 
   local function footerText(menu, party)
     if #party == 0 then return "NO POKéMON" end
-    if menu.swapFrom or menu.softboiledFrom or menu.pickOnly
+    if menu.swapFrom then return "SEL DROP B CANCEL" end
+    if menu.softboiledFrom or menu.pickOnly
         or menu.tmhm or menu.battle then
       return tostring(menu:bottomMessage() or ""):gsub("\n", " ")
+    end
+    if not menu.onSwitch and not menu.forceSwitch then
+      return "SEL PICK A OK B BACK"
     end
     return "A SELECT    B BACK"
   end
@@ -1836,10 +1840,13 @@ return function(mod, genderExports, compatibility)
       return column > 0 and index - 1 or index
     elseif direction == "right" then
       return column < columns - 1 and index + 1 <= count and index + 1 or index
-    elseif direction == "up" then
-      return verticalTarget(index, -1, count, columns)
-    elseif direction == "down" then
-      return verticalTarget(index, 1, count, columns)
+    elseif direction == "up" or direction == "down" then
+      local delta = direction == "up" and -1 or 1
+      local target = verticalTarget(index, delta, count, columns)
+      -- A two-Pokémon party has only one occupied row per column. Wrapping
+      -- within that column kept Up/Down on the fainted slot indefinitely.
+      if target == index then return (index - 1 + delta) % count + 1 end
+      return target
     end
     return index
   end
@@ -1848,6 +1855,31 @@ return function(mod, genderExports, compatibility)
     local input = menu.game.input
     if menu.submenu or menu.heal or not (input and input.wasPressed) then
       return PartyMenu.update(menu, dt)
+    end
+
+    -- Reuse the native swap state so the full Pokémon record moves together.
+    -- Target pickers and battle parties must never become reorderable.
+    local canSwap = not menu.battle and not menu.pickOnly and not menu.tmhm
+      and not menu.onSwitch and not menu.forceSwitch and not menu.softboiledFrom
+      and (not menu.party or menu.party == menu.game.save.party)
+    if canSwap and menu.swapFrom and input:wasPressed("b") then
+      menu.swapFrom = nil
+      require("src.core.Sound").play(menu.game.data, "Press_AB")
+      return
+    elseif canSwap and input:wasPressed("select") then
+      local party = partyOf(menu)
+      if menu.swapFrom then
+        local from, to = menu.swapFrom, menu.index
+        menu.swapFrom = nil
+        if party[from] and party[to] and from ~= to then
+          party[from], party[to] = party[to], party[from]
+          require("src.core.Sound").play(menu.game.data, "Swap")
+        end
+      elseif #party > 1 and party[menu.index] then
+        menu.swapFrom = menu.index
+        require("src.core.Sound").play(menu.game.data, "Press_AB")
+      end
+      return
     end
 
     local direction

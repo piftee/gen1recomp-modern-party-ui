@@ -3,6 +3,10 @@
 > [!IMPORTANT]
 > **This standalone mod has been superseded by [Modern UI Suite](https://github.com/piftee/gen1recomp-modern-ui-suite).** It remains available for existing installs, but future fixes and features will be maintained in the suite. Disable this standalone mod before enabling the suite; the suite imports its saved settings automatically.
 
+Crystal Animated Sprites with Shiny Visuals 2.0.2 compatibility: Gen 2
+Party summaries retain the companion's normal/shiny colours and animations.
+Native artwork keeps its cartridge palettes. Verified in Gold, Silver and Crystal.
+
 Modern Party UI rebuilds the POKéMON party screen and the built-in Pokémon
 summary pages with responsive cards while keeping Gen 1's own font, sprites
 and animated menu icons. Compatible information mods can add another modern
@@ -30,6 +34,17 @@ different generation or making the screen feel detached from Pokémon Red.
 The ZIP contains only the mod. You still need your own legally obtained Pokémon
 Red, Blue, Yellow, Gold, Silver, or Crystal ROM imported into
 [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp).
+
+## Party controls
+
+Select picks up the highlighted party slot. Move to another slot and press
+Select again to swap the Pokémon, or B to cancel the hold. The footer switches
+between pickup and drop hints. Gen 2 mail follows its Pokémon through the swap.
+Item targets and battle replacement menus keep their native selection rules.
+Up/Down wraps out of a column containing only one Pokémon, so small wide parties
+cannot trap the cursor on a fainted lead. Forced Gen 2 choices stay on occupied
+party slots. Refusal and item-result messages remain visible with an
+**A/B CONTINUE** hint; acknowledging a refused choice returns to the picker.
 
 ## What changes
 
