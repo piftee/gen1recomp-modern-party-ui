@@ -1,0 +1,17 @@
+name: Distribution assets
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tracked source and asset grants
+        run: python3 .github/scripts/distribution_guard.py
+      - name: Test distribution guard
+        run: python3 .github/scripts/test_distribution_guard.py
+      - name: Check complete source ZIP
+        run: |
+          git archive --format=zip HEAD -o "$RUNNER_TEMP/source.zip"
+          python3 .github/scripts/distribution_guard.py --zip "$RUNNER_TEMP/source.zip"
